@@ -1,8 +1,11 @@
 set(LIBS
+  MLIRMIOpenOps
+  MLIRMIOpenCpp
   MLIRParser
   MLIRPass
   MLIRSPIRV
   MLIRSPIRVSerialization
+  MLIRStandardOps
   MLIRTargetLLVMIR
   MLIRTargetNVVMIR
   MLIRTargetROCDLIR
