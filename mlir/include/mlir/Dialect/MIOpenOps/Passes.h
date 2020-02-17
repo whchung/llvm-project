@@ -27,6 +27,8 @@ namespace miopen {
 /// gridwise_gemm operations.
 std::unique_ptr<OpPassBase<ModuleOp>> createLowerMIOpenOpsPass();
 
+std::unique_ptr<OpPassBase<FuncOp>> createPassthroughPass();
+
 } // namespace miopen
 } // namespace mlir
 
