@@ -86,6 +86,10 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
     // - Part 2: PassThrough non-K dimension to dimension 1, name it as gemmM.
     //           Optimization: If non-K dimensions are consequetive, apply
     //           unfold.
+    //
+    // Weight tensor transformation for Conv2DBwdWeightOp
+    // - Part 1: Merge non-K dimensions to dimension 0, name it as gemmN.
+    // - Part 2: PassThrough K dimension to dimension 1, name it as gemmM.
     {
       llvm::SmallVector<IntegerAttr, 3> nonKDims;
       IntegerAttr kDim;
@@ -149,6 +153,11 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
         layoutAttr0.append(sourceNonKDimAttr.begin(), sourceNonKDimAttr.end());
         layoutAttr1.append(targetNonKDimAttr.begin(), targetNonKDimAttr.end());
         layoutAttr1.append(sourceKDimAttr.begin(), sourceKDimAttr.end());
+      } else if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+        layoutAttr0.append(targetKDimAttr.begin(), targetKDimAttr.end());
+        layoutAttr0.append(sourceKDimAttr.begin(), sourceKDimAttr.end());
+        layoutAttr1.append(targetNonKDimAttr.begin(), targetNonKDimAttr.end());
+        layoutAttr1.append(sourceNonKDimAttr.begin(), sourceNonKDimAttr.end());
       }
 
       transformedFilterAttrs.push_back(b.getNamedAttr(
@@ -459,9 +468,13 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
     arg1TargetLayoutName1.append(fields.gemmTargetCharName[1].substr(1, 1));
 
     // set layout attribute.
-    // Transformed input tensor transformation:
+    // input tensor transformation:
     // - Part 1: Merge ci, y, x dimensions to dimension 0, name it as gemmK.
     // - Part 2: Merge ni, ho, wo dimensions to dimension 1, name it as gemmN.
+    //
+    // input tensor transformation for Conv2DBwdWeightOp
+    // - Part 1: Merge ni, ho, wo dimensions to dimension 0, name it as gemmK.
+    // - Part 2: Merge ci, y, x dimensions to dimension 1, name it as gemmN.
     {
       IntegerAttr nDim, cDim;
       StringAttr nDimName, cDimName;
@@ -496,39 +509,80 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
 
       llvm::SmallVector<StringAttr, 3> mergedPart1DimNames;
       llvm::SmallVector<IntegerAttr, 3> mergedPart1Dims;
-      // Assume yDim is always less than xDim.
-      if (cDim.getInt() < yDim.getInt()) {
-        mergedPart1DimNames.push_back(cDimName);
-        mergedPart1DimNames.push_back(yDimName);
-        mergedPart1DimNames.push_back(xDimName);
-        mergedPart1Dims.push_back(cDim);
-        mergedPart1Dims.push_back(yDim);
-        mergedPart1Dims.push_back(xDim);
+
+      if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+        // Assume hDim is always less than wDim.
+        if (nDim.getInt() < hDim.getInt()) {
+          mergedPart1DimNames.push_back(nDimName);
+          mergedPart1DimNames.push_back(hDimName);
+          mergedPart1DimNames.push_back(wDimName);
+          mergedPart1Dims.push_back(nDim);
+          mergedPart1Dims.push_back(hDim);
+          mergedPart1Dims.push_back(wDim);
+        } else {
+          mergedPart1DimNames.push_back(hDimName);
+          mergedPart1DimNames.push_back(wDimName);
+          mergedPart1DimNames.push_back(nDimName);
+          mergedPart1Dims.push_back(hDim);
+          mergedPart1Dims.push_back(wDim);
+          mergedPart1Dims.push_back(nDim);
+        }
       } else {
-        mergedPart1DimNames.push_back(yDimName);
-        mergedPart1DimNames.push_back(xDimName);
-        mergedPart1DimNames.push_back(cDimName);
-        mergedPart1Dims.push_back(yDim);
-        mergedPart1Dims.push_back(xDim);
-        mergedPart1Dims.push_back(cDim);
+        // Assume yDim is always less than xDim.
+        if (cDim.getInt() < yDim.getInt()) {
+          mergedPart1DimNames.push_back(cDimName);
+          mergedPart1DimNames.push_back(yDimName);
+          mergedPart1DimNames.push_back(xDimName);
+          mergedPart1Dims.push_back(cDim);
+          mergedPart1Dims.push_back(yDim);
+          mergedPart1Dims.push_back(xDim);
+        } else {
+          mergedPart1DimNames.push_back(yDimName);
+          mergedPart1DimNames.push_back(xDimName);
+          mergedPart1DimNames.push_back(cDimName);
+          mergedPart1Dims.push_back(yDim);
+          mergedPart1Dims.push_back(xDim);
+          mergedPart1Dims.push_back(cDim);
+        }
       }
+
       llvm::SmallVector<StringAttr, 3> mergedPart2DimNames;
       llvm::SmallVector<IntegerAttr, 3> mergedPart2Dims;
-      // Assume hDim is always less than wDim.
-      if (nDim.getInt() < hDim.getInt()) {
-        mergedPart2DimNames.push_back(nDimName);
-        mergedPart2DimNames.push_back(hDimName);
-        mergedPart2DimNames.push_back(wDimName);
-        mergedPart2Dims.push_back(nDim);
-        mergedPart2Dims.push_back(hDim);
-        mergedPart2Dims.push_back(wDim);
+
+      if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+        // Assume yDim is always less than xDim.
+        if (cDim.getInt() < yDim.getInt()) {
+          mergedPart2DimNames.push_back(cDimName);
+          mergedPart2DimNames.push_back(yDimName);
+          mergedPart2DimNames.push_back(xDimName);
+          mergedPart2Dims.push_back(cDim);
+          mergedPart2Dims.push_back(yDim);
+          mergedPart2Dims.push_back(xDim);
+        } else {
+          mergedPart2DimNames.push_back(yDimName);
+          mergedPart2DimNames.push_back(xDimName);
+          mergedPart2DimNames.push_back(cDimName);
+          mergedPart2Dims.push_back(yDim);
+          mergedPart2Dims.push_back(xDim);
+          mergedPart2Dims.push_back(cDim);
+        }
       } else {
-        mergedPart2DimNames.push_back(hDimName);
-        mergedPart2DimNames.push_back(wDimName);
-        mergedPart2DimNames.push_back(nDimName);
-        mergedPart2Dims.push_back(hDim);
-        mergedPart2Dims.push_back(wDim);
-        mergedPart2Dims.push_back(nDim);
+        // Assume hDim is always less than wDim.
+        if (nDim.getInt() < hDim.getInt()) {
+          mergedPart2DimNames.push_back(nDimName);
+          mergedPart2DimNames.push_back(hDimName);
+          mergedPart2DimNames.push_back(wDimName);
+          mergedPart2Dims.push_back(nDim);
+          mergedPart2Dims.push_back(hDim);
+          mergedPart2Dims.push_back(wDim);
+        } else {
+          mergedPart2DimNames.push_back(hDimName);
+          mergedPart2DimNames.push_back(wDimName);
+          mergedPart2DimNames.push_back(nDimName);
+          mergedPart2Dims.push_back(hDim);
+          mergedPart2Dims.push_back(wDim);
+          mergedPart2Dims.push_back(nDim);
+        }
       }
 
       transformedInputAttrs.push_back(b.getNamedAttr(
@@ -743,6 +797,9 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
     } else if (convOpType == miopen::ConvOpType::Conv2DOpType) {
       gridwiseGemmAttrs.push_back(
           b.getNamedAttr("kernel_algorithm", b.getStringAttr("v4r4")));
+    } else if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+      gridwiseGemmAttrs.push_back(b.getNamedAttr(
+          "kernel_algorithm", b.getStringAttr("backward_weight_v4r4")));
     }
 
     // Emit miopen.gridwise_gemm op.
@@ -782,9 +839,21 @@ const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdDataOp>::fields = {
     {"KM", "MN", "KN"},
 };
 template <>
-const miopen::ConvOpType Conv2DRewritePattern<miopen::Conv2DBwdDataOp>::convOpType =
-    miopen::ConvOpType::Conv2DBwdDataOpType;
+const miopen::ConvOpType
+    Conv2DRewritePattern<miopen::Conv2DBwdDataOp>::convOpType =
+        miopen::ConvOpType::Conv2DBwdDataOpType;
+
+template <>
+const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdWeightOp>::fields = {
+    {2, 1, 0},
+    {"MN", "KN", "KM"},
+};
+template <>
+const miopen::ConvOpType
+    Conv2DRewritePattern<miopen::Conv2DBwdWeightOp>::convOpType =
+        miopen::ConvOpType::Conv2DBwdWeightOpType;
 
 // Explicitly instantiate the template to operation type
 template struct Conv2DRewritePattern<miopen::Conv2DOp>;
 template struct Conv2DRewritePattern<miopen::Conv2DBwdDataOp>;
+template struct Conv2DRewritePattern<miopen::Conv2DBwdWeightOp>;
