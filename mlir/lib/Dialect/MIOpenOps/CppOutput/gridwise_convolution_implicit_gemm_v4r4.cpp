@@ -148,7 +148,7 @@ static constexpr StringLiteral kCppInterludeFormat = R"(
         Sequence<GemmABlockCopyClusterLengths_GemmK, GemmABlockCopyClusterLengths_GemmM>;
 
     constexpr index_t GemmABlockCopySrcDataPerRead_%s =
-        CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_SRC_DATA_PER_READ_%s;
+        CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_SRC_DATA_PER_READ_GEMM;
 
     constexpr index_t GemmABlockCopyDstDataPerWrite_GemmM =
         CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_DST_DATA_PER_WRITE_GEMM_M;
@@ -232,8 +232,7 @@ void EmitCppPreamble(llvm::raw_ostream &output, miopen::ConvOpType opType) {
   if (opType == miopen::ConvOpType::Conv2DOpType) {
     output << R"(#include "gridwise_convolution_implicit_gemm_v4r4_)";
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    output
-        << R"(#include "gridwise_convolution_backward_data_implicit_gemm_v1r1_)";
+    output << R"(#include "gridwise_convolution_implicit_gemm_v1r1_)";
   }
 
   // Change to fixed "mlir".
@@ -273,7 +272,6 @@ void EmitCppInterlude(llvm::raw_ostream &output, miopen::ConvOpType opType) {
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[1];
   }
   output << llvm::format(kCppInterludeFormat.data(),
-                         gemmNameABlockCopySrcDataPerRead.c_str(),
                          gemmNameABlockCopySrcDataPerRead.c_str());
 }
 
@@ -393,10 +391,10 @@ static constexpr StringLiteral kHeaderPreamblePart3 = R"(
 static constexpr StringLiteral kHeaderEpilogueInMemOp = R"(
         // \todo there are more combinations of Y, ConvDilationH and ConvStrideH that don't need
         // atomic, find out all of them
-        constexpr bool not_need_atomic = (ConvStrideH >= ConvDilationH * (Y - 1) + 1) and
-                                         (ConvStrideW >= ConvDilationW * (X - 1) + 1);
+        constexpr bool not_need_atomic = (ConvStrideH >= ConvDilationH * (y - 1) + 1) and
+                                         (ConvStrideW >= ConvDilationW * (x - 1) + 1);
         constexpr auto in_memory_op = 
-            not_need_atomic ? InMemoryDataOperation::Set : In MemoryOperation::AtomicAdd;
+            not_need_atomic ? InMemoryDataOperation::Set : InMemoryDataOperation::AtomicAdd;
 )";
 
 static constexpr StringLiteral kHeaderEpiloguePart1 = R"(
@@ -423,8 +421,8 @@ static constexpr StringLiteral kHeaderEpiloguePart2 = R"(
                                                      GemmThreadGemmDataPerReadN,
                                                      GemmABlockCopyThreadSliceLengths_GemmK_GemmM,
                                                      GemmABlockCopyThreadClusterLengths_GemmK_GemmM,
-                                                     Sequence<1, 0>,
-                                                     Sequence<1, 0>,
+                                                     %s,
+                                                     %s,
 )";
 
 static constexpr StringLiteral kHeaderEpiloguePart3Format = R"(
@@ -432,8 +430,8 @@ static constexpr StringLiteral kHeaderEpiloguePart3Format = R"(
                                                      GemmABlockCopyDstDataPerWrite_GemmM,
                                                      GemmBBlockCopyThreadSliceLengths_GemmK_GemmN,
                                                      GemmBBlockCopyThreadClusterLengths_GemmK_GemmN,
-                                                     %s,
-                                                     %s,
+                                                     Sequence<0, 1>,
+                                                     Sequence<0, 1>,
 )";
 
 static constexpr StringLiteral kHeaderEpiloguePart4 = R"(
@@ -521,12 +519,17 @@ void EmitHeaderEpilogue(llvm::raw_ostream &output,
                                                      decltype()" << args[i] << "),";
   }
   std::string inMemOp;
+  std::string gemmHeaderEpiloguePart2Sequence;
   if (opType == miopen::ConvOpType::Conv2DOpType) {
     inMemOp = "InMemoryDataOperation::Set";
+    gemmHeaderEpiloguePart2Sequence = "Sequence<1, 0>";
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
     inMemOp = "in_memory_op";
+    gemmHeaderEpiloguePart2Sequence = "Sequence<0, 1>";
   }
-  output << llvm::format(kHeaderEpiloguePart2.data(), inMemOp.c_str());
+  output << llvm::format(kHeaderEpiloguePart2.data(), inMemOp.c_str(),
+                         gemmHeaderEpiloguePart2Sequence.c_str(),
+                         gemmHeaderEpiloguePart2Sequence.c_str());
 
   // Between Part2 and Part3 emit which dimension the vectorization takes place
   // for filter tensor. kcyx, kyxc, yxkc, ckyx: 0 yxck, cyxk: 1
@@ -537,18 +540,13 @@ void EmitHeaderEpilogue(llvm::raw_ostream &output,
   }
 
   std::string gemmNameABlockCopySrcDataPerRead;
-  std::string gemmHeaderEpiloguePart3Sequence;
   if (opType == miopen::ConvOpType::Conv2DOpType) {
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[0];
-    gemmHeaderEpiloguePart3Sequence = "Sequence<0, 1>";
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[1];
-    gemmHeaderEpiloguePart3Sequence = "Sequence<1, 0>";
   }
   output << llvm::format(kHeaderEpiloguePart3Format.data(),
-                         gemmNameABlockCopySrcDataPerRead.c_str(),
-                         gemmHeaderEpiloguePart3Sequence.c_str(),
-                         gemmHeaderEpiloguePart3Sequence.c_str());
+                         gemmNameABlockCopySrcDataPerRead.c_str());
   // Between Part3 and Part4 emit which dimension the vectorization takes place
   // for input tensor. nhwc, hwnc: 0 chwn, hwcn: 1 nchw, cnhw: non-vectorizable
   // for now, set to 0, with vectorization width to 1.
@@ -997,10 +995,10 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenHeader(ModuleOp m)
                   << "Sequence<";
               EmitInterleaveCommaArrayAttr<StringAttr>(ops, dstNames);
               if (convDilationCtr == 0) {
-                ops << ">, Sequence<ConvDilationH, ConvDilationH, 0>>{}";
+                ops << ">, Sequence<ConvDilationH, ConvStrideH, 0>>{}";
                 convDilationCtr++;
               } else {
-                ops << ">, Sequence<ConvDilationW, ConvDilationW, 0>>{}";
+                ops << ">, Sequence<ConvDilationW, ConvStrideW, 0>>{}";
               }
             }
             srcs << "Sequence<";
@@ -1255,7 +1253,7 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
         params.setValue(
             "CK_PARAM_TUNABLE_GEMM_C_THREAD_COPY_DST_DATA_PER_WRITE_GEMM_N1",
             4);
-      } else if ((input2VecLen > 0) && (input2VecLen % 2 == 0)) {
+      } else if ((outputVecLen > 0) && (outputVecLen % 2 == 0)) {
         params.setValue(
             "CK_PARAM_TUNABLE_GEMM_C_THREAD_COPY_DST_DATA_PER_WRITE_GEMM_N1",
             2);
@@ -1288,9 +1286,10 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
       // Emit code-gen related macros.
       output << " -DCK_THREADWISE_GEMM_USE_AMD_INLINE_ASM=1";
 
-      // Multiple-to-1 mapping in bwd data, needs atomic add
+      // Setting flag to 1 means using inline ASM to do atomic add
+      // This is not supported in gfx906, disabling it now
       if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-        output << " -DCK_USE_AMD_BUFFER_ATOMIC_ADD=1";
+        output << " -DCK_USE_AMD_BUFFER_ATOMIC_ADD=0";
       }
 
       output << " -std=c++14";

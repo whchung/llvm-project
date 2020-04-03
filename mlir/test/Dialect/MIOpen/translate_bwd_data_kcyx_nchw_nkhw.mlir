@@ -145,8 +145,11 @@ func @miopen_transformed_conv2d(%filter : memref<?x?x?x?xf32>, %input : memref<?
     // tuning parameters
     kernel_algorithm = "backward_data_v1r1",
     filter_layout = ["k", "c", "y", "x"],
+    filter_dimension = [4, 16, 4, 2],
     input_layout = ["ni", "ci", "hi", "wi"],
-    output_layout = ["no", "ko", "ho", "wo"]
+    input_dimension = [32, 16, 32, 32],
+    output_layout = ["no", "ko", "ho", "wo"],
+    output_dimension = [32, 4, 29, 31]
   } : memref<?x?xf32>,
       memref<?x?xf32>,
       memref<?x?xf32>
