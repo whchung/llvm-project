@@ -38,8 +38,7 @@ struct ArgumentFields {
   StringRef gemmTargetCharName[3];
 };
 
-template <typename T>
-struct Conv2DRewritePattern : public OpRewritePattern<T> {
+template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
   const static ArgumentFields fields;
   const static miopen::ConvOpType convOpType;
   using OpRewritePattern<T>::OpRewritePattern;
@@ -88,8 +87,8 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
     //           unfold.
     //
     // Weight tensor transformation for Conv2DBwdWeightOp
-    // - Part 1: Merge non-K dimensions to dimension 0, name it as gemmN.
-    // - Part 2: PassThrough K dimension to dimension 1, name it as gemmM.
+    // - Part 1: Merge non-K dimensions to dimension 1, name it as gemmN.
+    // - Part 2: PassThrough K dimension to dimension 0, name it as gemmM.
     {
       llvm::SmallVector<IntegerAttr, 3> nonKDims;
       IntegerAttr kDim;
@@ -399,18 +398,18 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
                       "dimensions",
                       b.getArrayAttr(ArrayRef<Attribute>(
                           reorderedYHoDim.begin(), reorderedYHoDim.end()))),
-                  b.getNamedAttr("names", b.getArrayAttr({
-                                              b.getStringAttr("y"),
-                                              b.getStringAttr("ho"),
-                                          })),
+                  b.getNamedAttr(
+                      "names", b.getArrayAttr({
+                                   b.getStringAttr("y"), b.getStringAttr("ho"),
+                               })),
                   b.getNamedAttr("transformation", b.getStringAttr("Embed")),
                   // TBD: padding parmeters.
-                  b.getNamedAttr("parameters", b.getArrayAttr({
-                                                   b.getI32IntegerAttr(2),
-                                                   b.getI32IntegerAttr(1),
-                                                   b.getI32IntegerAttr(1),
-                                                   b.getI32IntegerAttr(0),
-                                               })),
+                  b.getNamedAttr(
+                      "parameters",
+                      b.getArrayAttr({
+                          b.getI32IntegerAttr(2), b.getI32IntegerAttr(1),
+                          b.getI32IntegerAttr(1), b.getI32IntegerAttr(0),
+                      })),
                   b.getNamedAttr("source_dimensions", b.getArrayAttr({hDim})),
                   b.getNamedAttr("source_names", b.getArrayAttr({hDimName})),
               }),
@@ -421,18 +420,18 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
                       "dimensions",
                       b.getArrayAttr(ArrayRef<Attribute>(
                           reorderedXWoDim.begin(), reorderedXWoDim.end()))),
-                  b.getNamedAttr("names", b.getArrayAttr({
-                                              b.getStringAttr("x"),
-                                              b.getStringAttr("wo"),
-                                          })),
+                  b.getNamedAttr(
+                      "names", b.getArrayAttr({
+                                   b.getStringAttr("x"), b.getStringAttr("wo"),
+                               })),
                   b.getNamedAttr("transformation", b.getStringAttr("Embed")),
                   // TBD: embed parmeters.
-                  b.getNamedAttr("parameters", b.getArrayAttr({
-                                                   b.getI32IntegerAttr(2),
-                                                   b.getI32IntegerAttr(1),
-                                                   b.getI32IntegerAttr(1),
-                                                   b.getI32IntegerAttr(0),
-                                               })),
+                  b.getNamedAttr(
+                      "parameters",
+                      b.getArrayAttr({
+                          b.getI32IntegerAttr(2), b.getI32IntegerAttr(1),
+                          b.getI32IntegerAttr(1), b.getI32IntegerAttr(0),
+                      })),
                   b.getNamedAttr("source_dimensions", b.getArrayAttr({wDim})),
                   b.getNamedAttr("source_names", b.getArrayAttr({wDimName})),
               }),
@@ -826,8 +825,7 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
 // and the last argument to be output
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DOp>::fields = {
-    {0, 1, 2},
-    {"KM", "KN", "MN"},
+    {0, 1, 2}, {"KM", "KN", "MN"},
 };
 template <>
 const miopen::ConvOpType Conv2DRewritePattern<miopen::Conv2DOp>::convOpType =
@@ -835,8 +833,7 @@ const miopen::ConvOpType Conv2DRewritePattern<miopen::Conv2DOp>::convOpType =
 
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdDataOp>::fields = {
-    {0, 2, 1},
-    {"KM", "MN", "KN"},
+    {0, 2, 1}, {"KM", "MN", "KN"},
 };
 template <>
 const miopen::ConvOpType
@@ -845,8 +842,7 @@ const miopen::ConvOpType
 
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdWeightOp>::fields = {
-    {2, 1, 0},
-    {"MN", "KN", "KM"},
+    {2, 1, 0}, {"MN", "KN", "KM"},
 };
 template <>
 const miopen::ConvOpType
