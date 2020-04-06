@@ -38,7 +38,8 @@ struct ArgumentFields {
   StringRef gemmTargetCharName[3];
 };
 
-template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
+template <typename T>
+struct Conv2DRewritePattern : public OpRewritePattern<T> {
   const static ArgumentFields fields;
   const static miopen::ConvOpType convOpType;
   using OpRewritePattern<T>::OpRewritePattern;
@@ -398,18 +399,18 @@ template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
                       "dimensions",
                       b.getArrayAttr(ArrayRef<Attribute>(
                           reorderedYHoDim.begin(), reorderedYHoDim.end()))),
-                  b.getNamedAttr(
-                      "names", b.getArrayAttr({
-                                   b.getStringAttr("y"), b.getStringAttr("ho"),
-                               })),
+                  b.getNamedAttr("names", b.getArrayAttr({
+                                              b.getStringAttr("y"),
+                                              b.getStringAttr("ho"),
+                                          })),
                   b.getNamedAttr("transformation", b.getStringAttr("Embed")),
                   // TBD: padding parmeters.
-                  b.getNamedAttr(
-                      "parameters",
-                      b.getArrayAttr({
-                          b.getI32IntegerAttr(2), b.getI32IntegerAttr(1),
-                          b.getI32IntegerAttr(1), b.getI32IntegerAttr(0),
-                      })),
+                  b.getNamedAttr("parameters", b.getArrayAttr({
+                                                   b.getI32IntegerAttr(2),
+                                                   b.getI32IntegerAttr(1),
+                                                   b.getI32IntegerAttr(1),
+                                                   b.getI32IntegerAttr(0),
+                                               })),
                   b.getNamedAttr("source_dimensions", b.getArrayAttr({hDim})),
                   b.getNamedAttr("source_names", b.getArrayAttr({hDimName})),
               }),
@@ -420,18 +421,18 @@ template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
                       "dimensions",
                       b.getArrayAttr(ArrayRef<Attribute>(
                           reorderedXWoDim.begin(), reorderedXWoDim.end()))),
-                  b.getNamedAttr(
-                      "names", b.getArrayAttr({
-                                   b.getStringAttr("x"), b.getStringAttr("wo"),
-                               })),
+                  b.getNamedAttr("names", b.getArrayAttr({
+                                              b.getStringAttr("x"),
+                                              b.getStringAttr("wo"),
+                                          })),
                   b.getNamedAttr("transformation", b.getStringAttr("Embed")),
                   // TBD: embed parmeters.
-                  b.getNamedAttr(
-                      "parameters",
-                      b.getArrayAttr({
-                          b.getI32IntegerAttr(2), b.getI32IntegerAttr(1),
-                          b.getI32IntegerAttr(1), b.getI32IntegerAttr(0),
-                      })),
+                  b.getNamedAttr("parameters", b.getArrayAttr({
+                                                   b.getI32IntegerAttr(2),
+                                                   b.getI32IntegerAttr(1),
+                                                   b.getI32IntegerAttr(1),
+                                                   b.getI32IntegerAttr(0),
+                                               })),
                   b.getNamedAttr("source_dimensions", b.getArrayAttr({wDim})),
                   b.getNamedAttr("source_names", b.getArrayAttr({wDimName})),
               }),
@@ -663,6 +664,10 @@ template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
     // Output tensor transformation:
     // - Part 1: PassThrough K dimension to dimension 0, name it as gemmM.
     // - Part 2: Merge non-K dimensions to dimension 1, name it as gemmN.
+    //
+    // Output tensor transformation for backward weight:
+    // - Part 1: Merge non-K dimensions to dimension 0, name it as gemmK.
+    // - Part 2: PassThrough K dimension to dimension 1, name it as gemmM.
     {
       llvm::SmallVector<IntegerAttr, 3> nonKDims;
       IntegerAttr kDim;
@@ -681,36 +686,71 @@ template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
         }
       }
 
-      transformedOutputAttrs.push_back(b.getNamedAttr(
-          "layout",
-          b.getArrayAttr(
-              {// Part 1: Passthrough.
-               b.getDictionaryAttr({
-                   b.getNamedAttr("dimensions",
-                                  b.getArrayAttr({b.getI32IntegerAttr(0)})),
-                   b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                               arg2TargetLayoutName0)})),
-                   b.getNamedAttr("transformation",
-                                  b.getStringAttr("PassThrough")),
-                   b.getNamedAttr("source_dimensions", b.getArrayAttr({kDim})),
-                   b.getNamedAttr("source_names", b.getArrayAttr({kDimName})),
-               }),
+      if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+        transformedOutputAttrs.push_back(b.getNamedAttr(
+            "layout",
+            b.getArrayAttr({
 
-               // Part 2: Merge.
-               b.getDictionaryAttr({
-                   b.getNamedAttr("dimensions",
-                                  b.getArrayAttr({b.getI32IntegerAttr(1)})),
-                   b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                               arg2TargetLayoutName1)})),
-                   b.getNamedAttr("transformation", b.getStringAttr("Merge")),
-                   b.getNamedAttr("source_dimensions",
-                                  b.getArrayAttr(ArrayRef<Attribute>(
-                                      nonKDims.begin(), nonKDims.end()))),
-                   b.getNamedAttr(
-                       "source_names",
-                       b.getArrayAttr(ArrayRef<Attribute>(nonKDimNames.begin(),
-                                                          nonKDimNames.end()))),
-               })})));
+                // Part 1: Merge.
+                b.getDictionaryAttr({
+                    b.getNamedAttr("dimensions",
+                                   b.getArrayAttr({b.getI32IntegerAttr(0)})),
+                    b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                                arg2TargetLayoutName0)})),
+                    b.getNamedAttr("transformation", b.getStringAttr("Merge")),
+                    b.getNamedAttr("source_dimensions",
+                                   b.getArrayAttr(ArrayRef<Attribute>(
+                                       nonKDims.begin(), nonKDims.end()))),
+                    b.getNamedAttr(
+                        "source_names",
+                        b.getArrayAttr(ArrayRef<Attribute>(
+                            nonKDimNames.begin(), nonKDimNames.end()))),
+                }),
+
+                // Part 2: Passthrough.
+                b.getDictionaryAttr({
+                    b.getNamedAttr("dimensions",
+                                   b.getArrayAttr({b.getI32IntegerAttr(1)})),
+                    b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                                arg2TargetLayoutName1)})),
+                    b.getNamedAttr("transformation",
+                                   b.getStringAttr("PassThrough")),
+                    b.getNamedAttr("source_dimensions", b.getArrayAttr({kDim})),
+                    b.getNamedAttr("source_names", b.getArrayAttr({kDimName})),
+                })})));
+      } else {
+        transformedOutputAttrs.push_back(b.getNamedAttr(
+            "layout",
+            b.getArrayAttr(
+                {// Part 1: Passthrough.
+                 b.getDictionaryAttr({
+                     b.getNamedAttr("dimensions",
+                                    b.getArrayAttr({b.getI32IntegerAttr(0)})),
+                     b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                                 arg2TargetLayoutName0)})),
+                     b.getNamedAttr("transformation",
+                                    b.getStringAttr("PassThrough")),
+                     b.getNamedAttr("source_dimensions",
+                                    b.getArrayAttr({kDim})),
+                     b.getNamedAttr("source_names", b.getArrayAttr({kDimName})),
+                 }),
+
+                 // Part 2: Merge.
+                 b.getDictionaryAttr({
+                     b.getNamedAttr("dimensions",
+                                    b.getArrayAttr({b.getI32IntegerAttr(1)})),
+                     b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                                 arg2TargetLayoutName1)})),
+                     b.getNamedAttr("transformation", b.getStringAttr("Merge")),
+                     b.getNamedAttr("source_dimensions",
+                                    b.getArrayAttr(ArrayRef<Attribute>(
+                                        nonKDims.begin(), nonKDims.end()))),
+                     b.getNamedAttr(
+                         "source_names",
+                         b.getArrayAttr(ArrayRef<Attribute>(
+                             nonKDimNames.begin(), nonKDimNames.end()))),
+                 })})));
+      }
     }
 
     // set source_layout attribute.
@@ -825,7 +865,8 @@ template <typename T> struct Conv2DRewritePattern : public OpRewritePattern<T> {
 // and the last argument to be output
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DOp>::fields = {
-    {0, 1, 2}, {"KM", "KN", "MN"},
+    {0, 1, 2},
+    {"KM", "KN", "MN"},
 };
 template <>
 const miopen::ConvOpType Conv2DRewritePattern<miopen::Conv2DOp>::convOpType =
@@ -833,7 +874,8 @@ const miopen::ConvOpType Conv2DRewritePattern<miopen::Conv2DOp>::convOpType =
 
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdDataOp>::fields = {
-    {0, 2, 1}, {"KM", "MN", "KN"},
+    {0, 2, 1},
+    {"KM", "MN", "KN"},
 };
 template <>
 const miopen::ConvOpType
@@ -842,7 +884,8 @@ const miopen::ConvOpType
 
 template <>
 const ArgumentFields Conv2DRewritePattern<miopen::Conv2DBwdWeightOp>::fields = {
-    {2, 1, 0}, {"MN", "KN", "KM"},
+    {2, 1, 0},
+    {"MN", "KN", "KM"},
 };
 template <>
 const miopen::ConvOpType
