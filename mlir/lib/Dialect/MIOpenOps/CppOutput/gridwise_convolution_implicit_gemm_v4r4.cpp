@@ -273,7 +273,7 @@ void EmitCppPreamble(llvm::raw_ostream &output, miopen::ConvOpType opType) {
                            argPInGlobal.c_str());
   } else if (opType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
     output << llvm::format(kCppPreamblePart3Format.data(),
-                           argPOutGlobal.c_str(), argPInGlobal.c_str(),
+                           argPInGlobal.c_str(), argPOutGlobal.c_str(),
                            argPWeiGlobal.c_str());
   }
 }
@@ -496,7 +496,7 @@ void EmitHeaderPreamble(llvm::raw_ostream &output,
     commentGemmK = "K";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[1];
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    headerIncludeGuard = "BACKWARD_WEIGHT_IMPLICIT_GEMM_V1R1";
+    headerIncludeGuard = "BACKWARD_WEIGHT_IMPLICIT_GEMM_V4R4";
     commentGemmM = "K";
     commentGemmK = "N * H * W";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[0];
