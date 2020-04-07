@@ -345,7 +345,7 @@ static constexpr StringLiteral kHeaderPreamblePart1Format = R"(
 namespace ck {
 
 // GemmM = %s
-// GemmN = N * Ho * Wo
+// GemmN = %s
 // GemmK = %s
 template <index_t GridSize,
           index_t BlockSize,
@@ -406,10 +406,6 @@ static constexpr StringLiteral kHeaderPreamblePart2BwdWeight = R"(
 )";
 
 static constexpr StringLiteral kHeaderPreamblePart3 = R"(
-        constexpr auto I1 = Number<1>{};
-        constexpr auto I2 = Number<2>{};
-        constexpr auto I3 = Number<3>{};
-
         constexpr index_t ConvStrideH = ConvStrides{}[0];
         constexpr index_t ConvStrideW = ConvStrides{}[1];
 
@@ -483,27 +479,31 @@ void EmitHeaderPreamble(llvm::raw_ostream &output,
                         miopen::ConvOpType opType) {
   std::string headerIncludeGuard;
   std::string commentGemmM;
+  std::string commentGemmN;
   std::string commentGemmK;
   std::string gemmNameABlockCopySrcDataPerRead;
   if (opType == miopen::ConvOpType::Conv2DOpType) {
     headerIncludeGuard = "IMPLICIT_GEMM_V4R4";
     commentGemmM = "K";
+    commentGemmN = "N * H * W";
     commentGemmK = "C * Y * X";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[0];
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
     headerIncludeGuard = "BACKWARD_DATA_IMPLICIT_GEMM_V1R1";
     commentGemmM = "C * Y * X";
+    commentGemmN = "N * H * W";
     commentGemmK = "K";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[1];
-  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
+  } else if (opType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
     headerIncludeGuard = "BACKWARD_WEIGHT_IMPLICIT_GEMM_V4R4";
     commentGemmM = "K";
+    commentGemmN = "C * Y * X";
     commentGemmK = "N * H * W";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[0];
   }
   output << llvm::format(kHeaderPreamblePart1Format.data(),
                          headerIncludeGuard.c_str(), headerIncludeGuard.c_str(),
-                         commentGemmM.c_str(), commentGemmK.c_str(),
+                         commentGemmM.c_str(), commentGemmN.c_str(), commentGemmK.c_str(),
                          gemmNameABlockCopySrcDataPerRead.c_str());
 
   if (opType == miopen::ConvOpType::Conv2DOpType) {
@@ -566,6 +566,7 @@ void EmitHeaderEpilogue(llvm::raw_ostream &output,
     inMemOp = "in_memory_op";
   } else if (opType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
     inMemOp = "InMemoryDataOperation::Set";
+    gemmHeaderEpiloguePart2Sequence = "Sequence<1, 0>";
   }
   output << llvm::format(kHeaderEpiloguePart2.data(), inMemOp.c_str(),
                          gemmHeaderEpiloguePart2Sequence.c_str(),
