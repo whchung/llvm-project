@@ -272,9 +272,8 @@ void EmitCppPreamble(llvm::raw_ostream &output, miopen::ConvOpType opType) {
                            argPOutGlobal.c_str(), argPWeiGlobal.c_str(),
                            argPInGlobal.c_str());
   } else if (opType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
-    output << llvm::format(kCppPreamblePart3Format.data(),
-                           argPInGlobal.c_str(), argPOutGlobal.c_str(),
-                           argPWeiGlobal.c_str());
+    output << llvm::format(kCppPreamblePart3Format.data(), argPInGlobal.c_str(),
+                           argPOutGlobal.c_str(), argPWeiGlobal.c_str());
   }
 }
 
@@ -501,10 +500,10 @@ void EmitHeaderPreamble(llvm::raw_ostream &output,
     commentGemmK = "N * H * W";
     gemmNameABlockCopySrcDataPerRead = kGemmNameABlockCopySrcDataPerRead[0];
   }
-  output << llvm::format(kHeaderPreamblePart1Format.data(),
-                         headerIncludeGuard.c_str(), headerIncludeGuard.c_str(),
-                         commentGemmM.c_str(), commentGemmN.c_str(), commentGemmK.c_str(),
-                         gemmNameABlockCopySrcDataPerRead.c_str());
+  output << llvm::format(
+      kHeaderPreamblePart1Format.data(), headerIncludeGuard.c_str(),
+      headerIncludeGuard.c_str(), commentGemmM.c_str(), commentGemmN.c_str(),
+      commentGemmK.c_str(), gemmNameABlockCopySrcDataPerRead.c_str());
 
   if (opType == miopen::ConvOpType::Conv2DOpType) {
     output << R"(struct GridwiseConvolutionImplicitGemm_v4r4_)";
@@ -564,6 +563,7 @@ void EmitHeaderEpilogue(llvm::raw_ostream &output,
     gemmHeaderEpiloguePart2Sequence = "Sequence<1, 0>";
   } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
     inMemOp = "in_memory_op";
+    gemmHeaderEpiloguePart2Sequence = "Sequence<0, 1>";
   } else if (opType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
     inMemOp = "InMemoryDataOperation::Set";
     gemmHeaderEpiloguePart2Sequence = "Sequence<1, 0>";
