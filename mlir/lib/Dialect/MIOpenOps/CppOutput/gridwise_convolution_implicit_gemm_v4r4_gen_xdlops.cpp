@@ -33,347 +33,346 @@ std::string resultStr;
 class TunableParameters : public TunableParametersBase {
 public:
 
-  enum {
-    gemmMPerBlock = 0,
-    gemmNPerBlock = 1,
-    gemmKPerBlock = 2,
-    gemmMPerWave = 3,
-    gemmNPerWave = 4
-  };
-
   // TBD: review logic here as they may be tied to NCHW layout.
   std::tuple<int, int, int, int, bool>
-  calculateGemmABlockCopyPerformanceParameters(llvm::SmallVector<int64_t, 5> &param) {
-      int64_t clusterLengths_GemmK  = 0;
-      int64_t clusterLengths_GemmM  = 0;
-      int64_t srcDataPerRead_Gemm  = 4;
-      int64_t dstDataPerWrite_GemmM = 4;
-  
-      const auto waveSize = 64;
-      const auto blockSize =
-          param[gemmNPerBlock] * param[gemmMPerBlock] / (param[gemmMPerWave] * param[gemmNPerWave]) * waveSize;
-  
-      // Determine vectorization dimensions and lengths.
-      int64_t vectorizableLength = 0;
+  calculateGemmABlockCopyPerformanceParameters(TunableParams &param) {
+    int64_t clusterLengths_GemmK = 0;
+    int64_t clusterLengths_GemmM = 0;
+    int64_t srcDataPerRead_Gemm = 4;
+    int64_t dstDataPerWrite_GemmM = 4;
 
-      // Find the fastest changing dimension.
-      bool gemmKVectorizable = false;
-      bool gemmMVectorizable = false;
-      if (ctx.dimIndexVal["k"].first == 3) {
-        // When K is the fastest changing dimension,
-        // gemmM dimension is vectorizable.
-        // vectorization width depending on length of K.
-        vectorizableLength = ctx.dimIndexVal["k"].second;
-        gemmMVectorizable = true;
+    const auto waveSize = 64;
+    const auto blockSize = param.gemmNPerBlock * param.gemmMPerBlock /
+                           (param.gemmMPerWave * param.gemmNPerWave) * waveSize;
 
-        // gemmK dimension non-vectorizable.
+    // Determine vectorization dimensions and lengths.
+    int64_t vectorizableLength = 0;
+
+    // Find the fastest changing dimension.
+    bool gemmKVectorizable = false;
+    bool gemmMVectorizable = false;
+    if (ctx.dimIndexVal["k"].first == 3) {
+      // When K is the fastest changing dimension,
+      // gemmM dimension is vectorizable.
+      // vectorization width depending on length of K.
+      vectorizableLength = ctx.dimIndexVal["k"].second;
+      gemmMVectorizable = true;
+
+      // gemmK dimension non-vectorizable.
+    } else {
+      // gemmK dimension vectorizable,
+      // depending on which among C, Y, X be the fastest changing dimension.
+      if (ctx.dimIndexVal["k"].first == 0) {
+        // dimKF is the lowest changing dimension, which means dimC/dimY/dimX
+        vectorizableLength = ctx.dimIndexVal["c"].second *
+                             ctx.dimIndexVal["y"].second *
+                             ctx.dimIndexVal["x"].second;
       } else {
-        // gemmK dimension vectorizable,
-        // depending on which among C, Y, X be the fastest changing dimension.
-        if (ctx.dimIndexVal["k"].first == 0) {
-          // dimKF is the lowest changing dimension, which means dimC/dimY/dimX
-          vectorizableLength = ctx.dimIndexVal["c"].second *
-                               ctx.dimIndexVal["y"].second *
-                               ctx.dimIndexVal["x"].second;
-        } else {
-          if (ctx.dimIndexVal["c"].first == 3) {
-            vectorizableLength = ctx.dimIndexVal["c"].second;
-          } else if (ctx.dimIndexVal["x"].first == 3 &&
-                     ctx.dimIndexVal["y"].first == 2) {
-            vectorizableLength =
-                ctx.dimIndexVal["y"].second * ctx.dimIndexVal["x"].second;
-          }
+        if (ctx.dimIndexVal["c"].first == 3) {
+          vectorizableLength = ctx.dimIndexVal["c"].second;
+        } else if (ctx.dimIndexVal["x"].first == 3 &&
+                   ctx.dimIndexVal["y"].first == 2) {
+          vectorizableLength =
+              ctx.dimIndexVal["y"].second * ctx.dimIndexVal["x"].second;
         }
-
-        gemmKVectorizable = true;
-        // gemmM dimension non-vectorizable.
       }
 
-      if (gemmMVectorizable) {
-        srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param[gemmMPerBlock]);
-      } else if (gemmKVectorizable) {
-        srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param[gemmKPerBlock]);
-      } else {
-        srcDataPerRead_Gemm = 1;
-      }
+      gemmKVectorizable = true;
+      // gemmM dimension non-vectorizable.
+    }
 
-      // calculate threadwise copy size
-      const auto a_data_per_thread_copy = (param[gemmKPerBlock] * param[gemmMPerBlock]) / blockSize;
-  
-      if(!(a_data_per_thread_copy > 0))
-          return std::make_tuple(-1, -1, -1, -1, false);
+    if (gemmMVectorizable) {
+      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param.gemmMPerBlock);
+    } else if (gemmKVectorizable) {
+      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param.gemmKPerBlock);
+    } else {
+      srcDataPerRead_Gemm = 1;
+    }
 
-      // GemmABlockCopySrcDataPerRead_GemmK also bounded by size of threadwise copy
-      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, a_data_per_thread_copy);
-  
-      // decide threadwise copy lengths
-      const auto a_data_per_thread_copy_gemm_vectorized = srcDataPerRead_Gemm;
-      const auto a_data_per_thread_copy_gemm_nonvectorized =
-          a_data_per_thread_copy / a_data_per_thread_copy_gemm_vectorized;
-  
-      int64_t a_data_per_thread_copy_gemmk = 0;
-      int64_t a_data_per_thread_copy_gemmm = 0;
-      if (gemmMVectorizable) {
-        a_data_per_thread_copy_gemmk = a_data_per_thread_copy_gemm_nonvectorized;
-        a_data_per_thread_copy_gemmm = a_data_per_thread_copy_gemm_vectorized;
-      } else {
-        a_data_per_thread_copy_gemmk = a_data_per_thread_copy_gemm_vectorized;
-        a_data_per_thread_copy_gemmm = a_data_per_thread_copy_gemm_nonvectorized;
-      }
+    // calculate threadwise copy size
+    const auto a_data_per_thread_copy =
+        (param.gemmKPerBlock * param.gemmMPerBlock) / blockSize;
 
-      // GemmABlockCopyDstDataPerWrite_GemmM also bounded by size of threadwise copy
-      dstDataPerWrite_GemmM = gcd(dstDataPerWrite_GemmM, a_data_per_thread_copy_gemmm);
-  
-      // calculate blockwise copy thread cluster lengths
-      clusterLengths_GemmK = param[gemmKPerBlock] / a_data_per_thread_copy_gemmk;
-      clusterLengths_GemmM = param[gemmMPerBlock] / a_data_per_thread_copy_gemmm;
-  
-      if(!(clusterLengths_GemmK > 0 && clusterLengths_GemmM > 0))
-          return std::make_tuple(-1, -1, -1, -1, false);
+    if (!(a_data_per_thread_copy > 0))
+      return std::make_tuple(-1, -1, -1, -1, false);
 
-      //llvm::errs() << "======================\n";
-      //llvm::errs() << "Matrix A\n";
-      //llvm::errs() << "gemmK Vectorizable: " << gemmKVectorizable << "\n";
-      //llvm::errs() << "gemmM Vectorizable: " << gemmMVectorizable << "\n";
-      //llvm::errs() << "cluster lengths gemmK: " << clusterLengths_GemmK << "\n";
-      //llvm::errs() << "cluster lengths gemmM: " << clusterLengths_GemmM << "\n";
-      //llvm::errs() << "data per read: " << srcDataPerRead_Gemm << "\n";
-      //llvm::errs() << "data per write: " << dstDataPerWrite_GemmM << "\n";
-      //llvm::errs() << "======================\n";
-  
-      return std::make_tuple(clusterLengths_GemmK,
-                             clusterLengths_GemmM,
-                             srcDataPerRead_Gemm,
-                             dstDataPerWrite_GemmM,
-                             true);
+    // GemmABlockCopySrcDataPerRead_GemmK also bounded by size of threadwise
+    // copy
+    srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, a_data_per_thread_copy);
+
+    // decide threadwise copy lengths
+    const auto a_data_per_thread_copy_gemm_vectorized = srcDataPerRead_Gemm;
+    const auto a_data_per_thread_copy_gemm_nonvectorized =
+        a_data_per_thread_copy / a_data_per_thread_copy_gemm_vectorized;
+
+    int64_t a_data_per_thread_copy_gemmk = 0;
+    int64_t a_data_per_thread_copy_gemmm = 0;
+    if (gemmMVectorizable) {
+      a_data_per_thread_copy_gemmk = a_data_per_thread_copy_gemm_nonvectorized;
+      a_data_per_thread_copy_gemmm = a_data_per_thread_copy_gemm_vectorized;
+    } else {
+      a_data_per_thread_copy_gemmk = a_data_per_thread_copy_gemm_vectorized;
+      a_data_per_thread_copy_gemmm = a_data_per_thread_copy_gemm_nonvectorized;
+    }
+
+    // GemmABlockCopyDstDataPerWrite_GemmM also bounded by size of threadwise
+    // copy
+    dstDataPerWrite_GemmM =
+        gcd(dstDataPerWrite_GemmM, a_data_per_thread_copy_gemmm);
+
+    // calculate blockwise copy thread cluster lengths
+    clusterLengths_GemmK = param.gemmKPerBlock / a_data_per_thread_copy_gemmk;
+    clusterLengths_GemmM = param.gemmMPerBlock / a_data_per_thread_copy_gemmm;
+
+    if (!(clusterLengths_GemmK > 0 && clusterLengths_GemmM > 0))
+      return std::make_tuple(-1, -1, -1, -1, false);
+
+    // llvm::errs() << "======================\n";
+    // llvm::errs() << "Matrix A\n";
+    // llvm::errs() << "gemmK Vectorizable: " << gemmKVectorizable << "\n";
+    // llvm::errs() << "gemmM Vectorizable: " << gemmMVectorizable << "\n";
+    // llvm::errs() << "cluster lengths gemmK: " << clusterLengths_GemmK <<
+    // "\n"; llvm::errs() << "cluster lengths gemmM: " << clusterLengths_GemmM <<
+    // "\n"; llvm::errs() << "data per read: " << srcDataPerRead_Gemm << "\n";
+    // llvm::errs() << "data per write: " << dstDataPerWrite_GemmM << "\n";
+    // llvm::errs() << "======================\n";
+
+    return std::make_tuple(clusterLengths_GemmK, clusterLengths_GemmM,
+                           srcDataPerRead_Gemm, dstDataPerWrite_GemmM, true);
   }
 
   // TBD: review logic here as they may be tied to NCHW layout.
   std::tuple<int, int, int, int, bool>
-  calculateGemmBBlockCopyPerformanceParameters(llvm::SmallVector<int64_t, 5> &param) {
-      int64_t clusterLengths_GemmK  = 0;
-      int64_t clusterLengths_GemmN  = 0;
-      int64_t srcDataPerRead_Gemm  = 4;
-      int64_t dstDataPerWrite_GemmN = 4;
-  
-      const int64_t waveSize = 64;
-      const int64_t blockSize =
-          param[gemmNPerBlock] * param[gemmMPerBlock] / (param[gemmMPerWave] * param[gemmNPerWave]) * waveSize;
-      // Determine vectorization dimensions and lengths.
-      int64_t vectorizableLength = 0;
+  calculateGemmBBlockCopyPerformanceParameters(TunableParams &param) {
+    int64_t clusterLengths_GemmK = 0;
+    int64_t clusterLengths_GemmN = 0;
+    int64_t srcDataPerRead_Gemm = 4;
+    int64_t dstDataPerWrite_GemmN = 4;
 
-      bool gemmKVectorizable = false;
-      bool gemmNVectorizable = false;
-      // Find the fastest changing dimension.
-      if (ctx.dimIndexVal["ni"].first == 3) {
-        // When N is the fastest changing dimension,
-        // gemmN dimension is vectorizable.
-        // vectorization width depending on length of N.
-        vectorizableLength = ctx.dimIndexVal["ni"].second;
+    const int64_t waveSize = 64;
+    const int64_t blockSize = param.gemmNPerBlock * param.gemmMPerBlock /
+                              (param.gemmMPerWave * param.gemmNPerWave) *
+                              waveSize;
+    // Determine vectorization dimensions and lengths.
+    int64_t vectorizableLength = 0;
+
+    bool gemmKVectorizable = false;
+    bool gemmNVectorizable = false;
+    // Find the fastest changing dimension.
+    if (ctx.dimIndexVal["ni"].first == 3) {
+      // When N is the fastest changing dimension,
+      // gemmN dimension is vectorizable.
+      // vectorization width depending on length of N.
+      vectorizableLength = ctx.dimIndexVal["ni"].second;
+      gemmNVectorizable = true;
+
+      // gemmK dimension non-vectorizable.
+    } else if (ctx.dimIndexVal["ci"].first == 3) {
+      // When C is the fastest changing dimension,
+      // gemmK dimension vectorizable.
+      // vectorization width depending on length of C.
+      vectorizableLength = ctx.dimIndexVal["c"].second;
+      gemmKVectorizable = true;
+      // gemmN dimension non-vectorizable.
+    } else if (ctx.dimIndexVal["ci"].first == 0) {
+      if (ctx.dimIndexVal["y"].second == 1 &&
+          ctx.dimIndexVal["x"].second == 1 && ctx.strideVal[0] == 1 &&
+          ctx.strideVal[1] == 1 && ctx.paddingVal[0] == 0 &&
+          ctx.paddingVal[1] == 0 && ctx.paddingVal[2] == 0 &&
+          ctx.paddingVal[3] == 0) {
+        // \todo there are more configs that can go through this if branch
+        srcDataPerRead_Gemm =
+            gcd(srcDataPerRead_Gemm, ctx.dimIndexVal["ni"].second *
+                                         ctx.dimIndexVal["hi"].second *
+                                         ctx.dimIndexVal["wi"].second);
+
         gemmNVectorizable = true;
-
-        // gemmK dimension non-vectorizable.
-      } else if (ctx.dimIndexVal["ci"].first == 3) {
-        // When C is the fastest changing dimension,
-        // gemmK dimension vectorizable.
-        // vectorization width depending on length of C.
-        vectorizableLength = ctx.dimIndexVal["c"].second;
-        gemmKVectorizable = true;
-        // gemmN dimension non-vectorizable.
-      } else if (ctx.dimIndexVal["ci"].first == 0) {
-        if (ctx.dimIndexVal["y"].second == 1 &&
-            ctx.dimIndexVal["x"].second == 1 && ctx.strideVal[0] == 1 &&
-            ctx.strideVal[1] == 1 && ctx.paddingVal[0] == 0 &&
-            ctx.paddingVal[1] == 0 && ctx.paddingVal[2] == 0 &&
-            ctx.paddingVal[3] == 0) {
-          // \todo there are more configs that can go through this if branch
-          srcDataPerRead_Gemm =
-              gcd(srcDataPerRead_Gemm, ctx.dimIndexVal["ni"].second *
-                                           ctx.dimIndexVal["hi"].second *
-                                           ctx.dimIndexVal["wi"].second);
-
-          gemmNVectorizable = true;
-        } else {
-          srcDataPerRead_Gemm = 1;
-        }
-      } else if (ctx.dimIndexVal["hi"].first == 2 &&
-                 ctx.dimIndexVal["wi"].first == 3) {
-        if (ctx.dimIndexVal["y"].second == 1 &&
-            ctx.dimIndexVal["x"].second == 1 && ctx.strideVal[0] == 1 &&
-            ctx.strideVal[1] == 1 && ctx.paddingVal[0] == 0 &&
-            ctx.paddingVal[1] == 0 && ctx.paddingVal[2] == 0 &&
-            ctx.paddingVal[3] == 0) {
-          // \todo there are more configs that can go through this if branch
-          srcDataPerRead_Gemm =
-              gcd(srcDataPerRead_Gemm,
-                  ctx.dimIndexVal["hi"].second * ctx.dimIndexVal["wi"].second);
-
-          gemmNVectorizable = true;
-        } else if (ctx.strideVal[1] == 1) {
-          srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, ctx.paddingVal[2],
-                                    ctx.dimIndexVal["wi"].second,
-                                    ctx.paddingVal[3], ctx.dilationVal[1]);
-
-          gemmNVectorizable = true;
-        } else {
-          srcDataPerRead_Gemm = 1;
-        }
       } else {
         srcDataPerRead_Gemm = 1;
       }
+    } else if (ctx.dimIndexVal["hi"].first == 2 &&
+               ctx.dimIndexVal["wi"].first == 3) {
+      if (ctx.dimIndexVal["y"].second == 1 &&
+          ctx.dimIndexVal["x"].second == 1 && ctx.strideVal[0] == 1 &&
+          ctx.strideVal[1] == 1 && ctx.paddingVal[0] == 0 &&
+          ctx.paddingVal[1] == 0 && ctx.paddingVal[2] == 0 &&
+          ctx.paddingVal[3] == 0) {
+        // \todo there are more configs that can go through this if branch
+        srcDataPerRead_Gemm =
+            gcd(srcDataPerRead_Gemm,
+                ctx.dimIndexVal["hi"].second * ctx.dimIndexVal["wi"].second);
 
-      if (gemmNVectorizable) {
-        srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param[gemmNPerBlock]);
-      } else if (gemmKVectorizable) {
-        srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param[gemmKPerBlock]);
+        gemmNVectorizable = true;
+      } else if (ctx.strideVal[1] == 1) {
+        srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, ctx.paddingVal[2],
+                                  ctx.dimIndexVal["wi"].second,
+                                  ctx.paddingVal[3], ctx.dilationVal[1]);
+
+        gemmNVectorizable = true;
       } else {
         srcDataPerRead_Gemm = 1;
       }
-  
-      // calculate threadwise copy size
-      const int64_t b_data_per_thread_copy = (param[gemmKPerBlock] * param[gemmNPerBlock]) / blockSize;
-  
-      if(!(b_data_per_thread_copy > 0))
-          return std::make_tuple(-1, -1, -1, -1, false);
-  
-      // GemmBBlockCopySrcDataPerRead_GemmN also bounded by size of threadwise copy
-      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, b_data_per_thread_copy);
+    } else {
+      srcDataPerRead_Gemm = 1;
+    }
 
-      const int64_t b_data_per_thread_copy_gemm_vectorized = srcDataPerRead_Gemm;
-      const int64_t b_data_per_thread_copy_gemm_nonvectorized =
-          b_data_per_thread_copy / b_data_per_thread_copy_gemm_vectorized;
-  
-      int64_t b_data_per_thread_copy_gemmk = 0;
-      int64_t b_data_per_thread_copy_gemmn = 0;
-      if (gemmNVectorizable) {
-        b_data_per_thread_copy_gemmk = b_data_per_thread_copy_gemm_nonvectorized;
-        b_data_per_thread_copy_gemmn = b_data_per_thread_copy_gemm_vectorized;
-      } else {
-        b_data_per_thread_copy_gemmk = b_data_per_thread_copy_gemm_vectorized;
-        b_data_per_thread_copy_gemmn = b_data_per_thread_copy_gemm_nonvectorized;
-      }
+    if (gemmNVectorizable) {
+      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param.gemmNPerBlock);
+    } else if (gemmKVectorizable) {
+      srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param.gemmKPerBlock);
+    } else {
+      srcDataPerRead_Gemm = 1;
+    }
 
-      // GemmBBlockCopyDstDataPerWrite_GemmN also bounded by size of threadwise copy
-      dstDataPerWrite_GemmN = gcd(dstDataPerWrite_GemmN, b_data_per_thread_copy_gemmn);
-  
-      // calculate blockwise copy thread cluster lengths
-      clusterLengths_GemmK = param[gemmKPerBlock] / b_data_per_thread_copy_gemmk;
-      clusterLengths_GemmN = param[gemmNPerBlock] / b_data_per_thread_copy_gemmn;
-  
-      if(!(clusterLengths_GemmK > 0 && clusterLengths_GemmN > 0))
-          return std::make_tuple(-1, -1, -1, -1, false);
-  
-      //llvm::errs() << "======================\n";
-      //llvm::errs() << "Matrix B\n";
-      //llvm::errs() << "gemmK Vectorizable: " << gemmKVectorizable << "\n";
-      //llvm::errs() << "gemmN Vectorizable: " << gemmNVectorizable << "\n";
-      //llvm::errs() << "cluster lengths gemmK: " << clusterLengths_GemmK << "\n";
-      //llvm::errs() << "cluster lengths gemmN: " << clusterLengths_GemmN << "\n";
-      //llvm::errs() << "data per read: " << srcDataPerRead_Gemm << "\n";
-      //llvm::errs() << "data per write: " << dstDataPerWrite_GemmN << "\n";
-      //llvm::errs() << "======================\n";
+    // calculate threadwise copy size
+    const int64_t b_data_per_thread_copy =
+        (param.gemmKPerBlock * param.gemmNPerBlock) / blockSize;
 
-      return std::make_tuple(clusterLengths_GemmK,
-                             clusterLengths_GemmN,
-                             srcDataPerRead_Gemm,
-                             dstDataPerWrite_GemmN,
-                             true);
+    if (!(b_data_per_thread_copy > 0))
+      return std::make_tuple(-1, -1, -1, -1, false);
+
+    // GemmBBlockCopySrcDataPerRead_GemmN also bounded by size of threadwise
+    // copy
+    srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, b_data_per_thread_copy);
+
+    const int64_t b_data_per_thread_copy_gemm_vectorized = srcDataPerRead_Gemm;
+    const int64_t b_data_per_thread_copy_gemm_nonvectorized =
+        b_data_per_thread_copy / b_data_per_thread_copy_gemm_vectorized;
+
+    int64_t b_data_per_thread_copy_gemmk = 0;
+    int64_t b_data_per_thread_copy_gemmn = 0;
+    if (gemmNVectorizable) {
+      b_data_per_thread_copy_gemmk = b_data_per_thread_copy_gemm_nonvectorized;
+      b_data_per_thread_copy_gemmn = b_data_per_thread_copy_gemm_vectorized;
+    } else {
+      b_data_per_thread_copy_gemmk = b_data_per_thread_copy_gemm_vectorized;
+      b_data_per_thread_copy_gemmn = b_data_per_thread_copy_gemm_nonvectorized;
+    }
+
+    // GemmBBlockCopyDstDataPerWrite_GemmN also bounded by size of threadwise
+    // copy
+    dstDataPerWrite_GemmN =
+        gcd(dstDataPerWrite_GemmN, b_data_per_thread_copy_gemmn);
+
+    // calculate blockwise copy thread cluster lengths
+    clusterLengths_GemmK = param.gemmKPerBlock / b_data_per_thread_copy_gemmk;
+    clusterLengths_GemmN = param.gemmNPerBlock / b_data_per_thread_copy_gemmn;
+
+    if (!(clusterLengths_GemmK > 0 && clusterLengths_GemmN > 0))
+      return std::make_tuple(-1, -1, -1, -1, false);
+
+    // llvm::errs() << "======================\n";
+    // llvm::errs() << "Matrix B\n";
+    // llvm::errs() << "gemmK Vectorizable: " << gemmKVectorizable << "\n";
+    // llvm::errs() << "gemmN Vectorizable: " << gemmNVectorizable << "\n";
+    // llvm::errs() << "cluster lengths gemmK: " << clusterLengths_GemmK <<
+    // "\n"; llvm::errs() << "cluster lengths gemmN: " << clusterLengths_GemmN <<
+    // "\n"; llvm::errs() << "data per read: " << srcDataPerRead_Gemm << "\n";
+    // llvm::errs() << "data per write: " << dstDataPerWrite_GemmN << "\n";
+    // llvm::errs() << "======================\n";
+
+    return std::make_tuple(clusterLengths_GemmK, clusterLengths_GemmN,
+                           srcDataPerRead_Gemm, dstDataPerWrite_GemmN, true);
   }
 
   // TBD: review logic here as they may be tied to NCHW layout.
-  std::tuple<std::size_t, bool> 
-  calculateLdsNumberOfByte(llvm::SmallVector<int64_t, 5> &param) {
-      std::size_t lds_size = 0;
-  
-      bool valid = false;
-  
-      int64_t gemmABlockCopyDescDataPerWriteGemmM = 0;
-      int64_t gemmABlockCopyClusterLengths_GemmM  = 0;
-      std::tie(std::ignore,
-               gemmABlockCopyClusterLengths_GemmM,
-               std::ignore,
-               gemmABlockCopyDescDataPerWriteGemmM,
-               valid) = calculateGemmABlockCopyPerformanceParameters(param);
-  
-      if(!valid)
-          return std::make_tuple(0, false);
-  
-      int64_t gemmBBlockCopyDescDataPerWriteGemmN = 0;
-      int64_t gemmBBlockCopyClusterLengths_GemmN  = 0;
-      std::tie(std::ignore,
-               gemmBBlockCopyClusterLengths_GemmN,
-               std::ignore,
-               gemmBBlockCopyDescDataPerWriteGemmN,
-               valid) = calculateGemmBBlockCopyPerformanceParameters(param);
-  
-      if(!valid)
-          return std::make_tuple(0, false);
-  
-      int64_t threadGemmDataPerRead_GemmM = param[gemmMPerBlock] / gemmABlockCopyClusterLengths_GemmM;
-      int64_t threadGemmDataPerRead_GemmN = param[gemmNPerBlock] / gemmBBlockCopyClusterLengths_GemmN;
-  
-      const auto max_lds_align = lcm(gemmABlockCopyDescDataPerWriteGemmM,
-                                     gemmBBlockCopyDescDataPerWriteGemmN,
-                                     threadGemmDataPerRead_GemmM,
-                                     threadGemmDataPerRead_GemmN);
-  
-      const auto a_block_space =
-          param[gemmKPerBlock] * integer_least_multiple(param[gemmMPerBlock], max_lds_align);
-      const auto b_block_space =
-          param[gemmKPerBlock] * integer_least_multiple(param[gemmNPerBlock], max_lds_align);
-  
-      lds_size = 2 * (a_block_space + b_block_space) * sizeof(float);
-  
-      return std::make_tuple(lds_size, true);
+  std::tuple<std::size_t, bool> calculateLdsNumberOfByte(TunableParams &param) {
+    std::size_t lds_size = 0;
+
+    bool valid = false;
+
+    int64_t gemmABlockCopyDescDataPerWriteGemmM = 0;
+    int64_t gemmABlockCopyClusterLengths_GemmM = 0;
+    std::tie(std::ignore, gemmABlockCopyClusterLengths_GemmM, std::ignore,
+             gemmABlockCopyDescDataPerWriteGemmM, valid) =
+        calculateGemmABlockCopyPerformanceParameters(param);
+
+    if (!valid)
+      return std::make_tuple(0, false);
+
+    int64_t gemmBBlockCopyDescDataPerWriteGemmN = 0;
+    int64_t gemmBBlockCopyClusterLengths_GemmN = 0;
+    std::tie(std::ignore, gemmBBlockCopyClusterLengths_GemmN, std::ignore,
+             gemmBBlockCopyDescDataPerWriteGemmN, valid) =
+        calculateGemmBBlockCopyPerformanceParameters(param);
+
+    if (!valid)
+      return std::make_tuple(0, false);
+
+    int64_t threadGemmDataPerRead_GemmM =
+        param.gemmMPerBlock / gemmABlockCopyClusterLengths_GemmM;
+    int64_t threadGemmDataPerRead_GemmN =
+        param.gemmNPerBlock / gemmBBlockCopyClusterLengths_GemmN;
+
+    const auto max_lds_align =
+        lcm(gemmABlockCopyDescDataPerWriteGemmM,
+            gemmBBlockCopyDescDataPerWriteGemmN, threadGemmDataPerRead_GemmM,
+            threadGemmDataPerRead_GemmN);
+
+    const auto a_block_space =
+        param.gemmKPerBlock *
+        integer_least_multiple(param.gemmMPerBlock, max_lds_align);
+    const auto b_block_space =
+        param.gemmKPerBlock *
+        integer_least_multiple(param.gemmNPerBlock, max_lds_align);
+
+    lds_size = 2 * (a_block_space + b_block_space) * sizeof(float);
+
+    return std::make_tuple(lds_size, true);
   }
 
-  bool isValidXDLOPSGemm(llvm::SmallVector<int64_t, 5> &param) {
+  bool isValidXDLOPSGemm(TunableParams &param) {
     // TBD: support fp16/bf16
-    const auto gemmKPackedPerBlock = param[gemmKPerBlock];
+    const auto gemmKPackedPerBlock = param.gemmKPerBlock;
 
     // unsupported xdlops-gemm
-    if(param[gemmMPerWave] == 16 && param[gemmNPerWave] == 32)
-        return false;
-    if(param[gemmMPerWave] == 32 && param[gemmNPerWave] == 16)
-        return false;
-    if(param[gemmMPerWave] == 8 && param[gemmNPerWave] != 64)
-        return false;
-    if(param[gemmMPerWave] == 4 && param[gemmNPerWave] != 64)
-        return false;
-    if(param[gemmMPerWave] == 32 && param[gemmNPerWave] == 32 && gemmKPackedPerBlock % 2 != 0)
-        return false;
-    if(param[gemmMPerWave] == 16 && param[gemmNPerWave] == 16 && gemmKPackedPerBlock % 4 != 0)
-        return false;
+    if (param.gemmMPerWave == 16 && param.gemmNPerWave == 32)
+      return false;
+    if (param.gemmMPerWave == 32 && param.gemmNPerWave == 16)
+      return false;
+    if (param.gemmMPerWave == 8 && param.gemmNPerWave != 64)
+      return false;
+    if (param.gemmMPerWave == 4 && param.gemmNPerWave != 64)
+      return false;
+    if (param.gemmMPerWave == 32 && param.gemmNPerWave == 32 &&
+        gemmKPackedPerBlock % 2 != 0)
+      return false;
+    if (param.gemmMPerWave == 16 && param.gemmNPerWave == 16 &&
+        gemmKPackedPerBlock % 4 != 0)
+      return false;
 
     const auto waveSize  = 64;
-    const auto blockSize = param[gemmNPerBlock] * param[gemmMPerBlock] / (param[gemmMPerWave] * param[gemmNPerWave]) * waveSize;
+    const auto blockSize = param.gemmNPerBlock * param.gemmMPerBlock /
+                           (param.gemmMPerWave * param.gemmNPerWave) * waveSize;
 
     // fail with blockSize >= 512
     /// \todo fix the issue with blockSize >= 512
     if(blockSize < 64 || blockSize > 256)
         return false;
 
-    return (param[gemmMPerBlock] % param[gemmMPerWave]) == 0 && (param[gemmNPerBlock] % param[gemmNPerWave]) == 0;
+    return (param.gemmMPerBlock % param.gemmMPerWave) == 0 &&
+           (param.gemmNPerBlock % param.gemmNPerWave) == 0;
   }
 
   // TBD review logic here for various layouts.
-  bool isValidParameter(llvm::SmallVector<int64_t, 5> &param) {
+  bool isValidParameter(TunableParams &param) {
     int64_t gemmM = ctx.dimIndexVal["k"].second;
     int64_t gemmN = ctx.dimIndexVal["no"].second *
                     ctx.dimIndexVal["ho"].second * ctx.dimIndexVal["wo"].second;
     int64_t gemmK = ctx.dimIndexVal["c"].second * ctx.dimIndexVal["y"].second *
                     ctx.dimIndexVal["x"].second;
 
-    //llvm::errs() << "gemmM: " << gemmM << " gemmN: " << gemmN << " gemmK: " << gemmK << "\n";
-    //llvm::errs() << "MPerBlock: " << param[gemmMPerBlock] << "\n";
-    //llvm::errs() << "NPerBlock: " << param[gemmNPerBlock] << "\n";
-    //llvm::errs() << "KPerBlock: " << param[gemmKPerBlock] << "\n";
-    //llvm::errs() << "MPerWave: " << param[gemmMPerWave] << "\n";
-    //llvm::errs() << "NPerWave: " << param[gemmNPerWave] << "\n";
+    // llvm::errs() << "gemmM: " << gemmM << " gemmN: " << gemmN << " gemmK: "
+    // << gemmK << "\n"; llvm::errs() << "MPerBlock: " << param.gemmMPerBlock <<
+    // "\n"; 
+    // llvm::errs() << "NPerBlock: " << param.gemmNPerBlock << "\n";
+    // llvm::errs() << "KPerBlock: " << param.gemmKPerBlock << "\n";
+    // llvm::errs() << "MPerWave: " << param.gemmMPerWave << "\n";
+    // llvm::errs() << "NPerWave: " << param.gemmNPerWave << "\n";
 
-    if (!(gemmM % param[gemmMPerBlock] == 0 &&
-          gemmN % param[gemmNPerBlock] == 0 &&
-          gemmK % param[gemmKPerBlock] == 0)) {
+    if (!(gemmM % param.gemmMPerBlock == 0 &&
+          gemmN % param.gemmNPerBlock == 0 &&
+          gemmK % param.gemmKPerBlock == 0)) {
       //llvm::errs() << "NOT VALID\n";
       return false;
     }
@@ -417,24 +416,20 @@ public:
 
   void customInit() override {
     // Check the following initial tuning parameters and find the valid one.
-    llvm::SmallVector<llvm::SmallVector<int64_t, 5>, 10> initParameters = {
-      // 0: GEMM_M_PER_BLOCK
-      // 1: GEMM_N_PER_BLOCK
-      // 2: GEMM_K_PER_BLOCK
-      // 3: GEMM_M_PER_WAVE
-      // 4: GEMM_N_PER_WAVE
-      {128, 128, 16, 64, 64},
-      {  8,  64,  8,  8, 64},
-      {  4,  64, 16,  4, 64},
-      { 16,  16,  4, 16, 16},
+    llvm::SmallVector<TunableParams, 10> initParameters = {
+        // M/block N/block K/block M/wave N/wave
+        {128, 128, 16, 64, 64},
+        {8, 64, 8, 8, 64},
+        {4, 64, 16, 4, 64},
+        {16, 16, 4, 16, 16},
     };
 
     bool foundValidParameters = false;
-    llvm::SmallVector<int64_t, 5> validParameter;
+    TunableParams validParams;
     for (auto &param : initParameters) {
       if (isValidParameter(param)) {
         foundValidParameters = true;
-        validParameter = param;
+        validParams = param;
         break;
       }
     }
@@ -444,15 +439,17 @@ public:
     }
 
     // parameters truly tunable.
-    params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] = validParameter[gemmMPerBlock];
-    params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] = validParameter[gemmNPerBlock];
-    params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] = validParameter[gemmKPerBlock];
-    params["CK_PARAM_GEMM_M_PER_WAVE"] = validParameter[gemmMPerWave];
-    params["CK_PARAM_GEMM_N_PER_WAVE"] = validParameter[gemmNPerWave];
+    params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] = validParams.gemmMPerBlock;
+    params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] = validParams.gemmNPerBlock;
+    params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] = validParams.gemmKPerBlock;
+    params["CK_PARAM_GEMM_M_PER_WAVE"] = validParams.gemmMPerWave;
+    params["CK_PARAM_GEMM_N_PER_WAVE"] = validParams.gemmNPerWave;
 
     // parameters derivable from tunable parameters.
     const auto waveSize = 64;
-    params["CK_PARAM_TUNABLE_BLOCK_SIZE"] = validParameter[gemmMPerBlock] * validParameter[gemmNPerBlock] / (validParameter[gemmMPerWave] * validParameter[gemmNPerWave]) * waveSize;
+    params["CK_PARAM_TUNABLE_BLOCK_SIZE"] =
+        validParams.gemmMPerBlock * validParams.gemmNPerBlock /
+        (validParams.gemmMPerWave * validParams.gemmNPerWave) * waveSize;
 
     int gemmABlockCopyClusterLengths_GemmK  = 0;
     int gemmABlockCopyClusterLengths_GemmM  = 0;
@@ -466,15 +463,14 @@ public:
     std::tie(gemmABlockCopyClusterLengths_GemmK,
              gemmABlockCopyClusterLengths_GemmM,
              gemmABlockCopySrcDataPerRead_GemmK,
-             gemmABlockCopyDstDataPerWrite_GemmM,
-             std::ignore) = calculateGemmABlockCopyPerformanceParameters(validParameter);
+             gemmABlockCopyDstDataPerWrite_GemmM, std::ignore) =
+        calculateGemmABlockCopyPerformanceParameters(validParams);
 
     std::tie(gemmBBlockCopyClusterLengths_GemmK,
              gemmBBlockCopyClusterLengths_GemmN,
              gemmBBlockCopySrcDataPerRead_GemmN,
-             gemmBBlockCopyDstDataPerWrite_GemmN,
-             std::ignore) = calculateGemmBBlockCopyPerformanceParameters(validParameter);
-
+             gemmBBlockCopyDstDataPerWrite_GemmN, std::ignore) =
+        calculateGemmBBlockCopyPerformanceParameters(validParams);
 
     params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] = gemmABlockCopyClusterLengths_GemmK;
     params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M"] = gemmABlockCopyClusterLengths_GemmM;

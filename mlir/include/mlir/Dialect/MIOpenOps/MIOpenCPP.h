@@ -97,6 +97,14 @@ struct ConvolutionContext {
   llvm::SmallVector<int64_t, 0> paddingVal;
 };
 
+struct TunableParams {
+  int64_t gemmMPerBlock;
+  int64_t gemmNPerBlock;
+  int64_t gemmKPerBlock;
+  int64_t gemmMPerWave;
+  int64_t gemmNPerWave;
+};
+
 class TunableParametersBase {
 public:
   TunableParametersBase(llvm::StringRef &&yamlFileName) : params(), configFileName(yamlFileName), ctx() {}
