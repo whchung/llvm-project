@@ -91,16 +91,10 @@ T integer_least_multiple(T x, T y)
 }
 
 struct ConvolutionContext {
-    int64_t k, c, y, x;
-    int64_t n, hi, wi;
-    int64_t ho, wo;
-    int64_t strideH, strideW;
-    int64_t dilationH, dilationW;
-    int64_t paddingHL, paddingHR, paddingWL, paddingWR;
-
-    size_t dimKF, dimCF, dimYF, dimXF;
-    size_t dimNO, dimKO, dimHO, dimWO;
-    size_t dimNI, dimCI, dimHI, dimWI;
+  llvm::StringMap<std::pair<size_t, int64_t>> dimIndexVal;
+  llvm::SmallVector<int64_t, 0> strideVal;
+  llvm::SmallVector<int64_t, 0> dilationVal;
+  llvm::SmallVector<int64_t, 0> paddingVal;
 };
 
 class TunableParametersBase {
@@ -117,10 +111,7 @@ public:
     }
   }
 
-  void initWithContext(ConvolutionContext &ctx) {
-    this->ctx = ctx;
-    init();
-  }
+  void setContext(ConvolutionContext &ctx) { this->ctx = ctx; }
 
   virtual void customInit() = 0;
 
