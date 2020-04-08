@@ -30,21 +30,12 @@ namespace {
 // result string to keep C++ source / header / flags emission.
 std::string resultStr;
 
-class TunableParameters : public TunableParametersBase {
+class PopulateParams : public PopulateParamsBase {
 public:
-
   // TBD: review logic here as they may be tied to NCHW layout.
   std::tuple<int, int, int, int, bool>
-  calculateGemmABlockCopyPerformanceParameters(TunableParams &param) {
-    int64_t clusterLengths_GemmK = 0;
-    int64_t clusterLengths_GemmM = 0;
-    int64_t srcDataPerRead_Gemm = 4;
-    int64_t dstDataPerWrite_GemmM = 4;
-
-    const auto waveSize = 64;
-    const auto blockSize = param.gemmNPerBlock * param.gemmMPerBlock /
-                           (param.gemmMPerWave * param.gemmNPerWave) * waveSize;
-
+  calculateGemmABlockCopyPerformanceParameters(InitParams &param,
+                                               const ConvolutionContext &ctx) {
     // Determine vectorization dimensions and lengths.
     int64_t vectorizableLength = 0;
 
@@ -80,6 +71,15 @@ public:
       gemmKVectorizable = true;
       // gemmM dimension non-vectorizable.
     }
+
+    int64_t clusterLengths_GemmK = 0;
+    int64_t clusterLengths_GemmM = 0;
+    int64_t srcDataPerRead_Gemm = 4;
+    int64_t dstDataPerWrite_GemmM = 4;
+
+    const auto waveSize = 64;
+    const auto blockSize = param.gemmNPerBlock * param.gemmMPerBlock /
+                           (param.gemmMPerWave * param.gemmNPerWave) * waveSize;
 
     if (gemmMVectorizable) {
       srcDataPerRead_Gemm = gcd(srcDataPerRead_Gemm, param.gemmMPerBlock);
@@ -143,7 +143,8 @@ public:
 
   // TBD: review logic here as they may be tied to NCHW layout.
   std::tuple<int, int, int, int, bool>
-  calculateGemmBBlockCopyPerformanceParameters(TunableParams &param) {
+  calculateGemmBBlockCopyPerformanceParameters(InitParams &param,
+                                               ConvolutionContext &ctx) {
     int64_t clusterLengths_GemmK = 0;
     int64_t clusterLengths_GemmN = 0;
     int64_t srcDataPerRead_Gemm = 4;
@@ -159,6 +160,7 @@ public:
     bool gemmKVectorizable = false;
     bool gemmNVectorizable = false;
     // Find the fastest changing dimension.
+    // if (ctx.dimIndexVal["ni"].first == 3) {
     if (ctx.dimIndexVal["ni"].first == 3) {
       // When N is the fastest changing dimension,
       // gemmN dimension is vectorizable.
@@ -276,7 +278,8 @@ public:
   }
 
   // TBD: review logic here as they may be tied to NCHW layout.
-  std::tuple<std::size_t, bool> calculateLdsNumberOfByte(TunableParams &param) {
+  std::tuple<std::size_t, bool>
+  calculateLdsNumberOfByte(InitParams &param, ConvolutionContext &ctx) {
     std::size_t lds_size = 0;
 
     bool valid = false;
@@ -285,7 +288,7 @@ public:
     int64_t gemmABlockCopyClusterLengths_GemmM = 0;
     std::tie(std::ignore, gemmABlockCopyClusterLengths_GemmM, std::ignore,
              gemmABlockCopyDescDataPerWriteGemmM, valid) =
-        calculateGemmABlockCopyPerformanceParameters(param);
+        calculateGemmABlockCopyPerformanceParameters(param, ctx);
 
     if (!valid)
       return std::make_tuple(0, false);
@@ -294,7 +297,7 @@ public:
     int64_t gemmBBlockCopyClusterLengths_GemmN = 0;
     std::tie(std::ignore, gemmBBlockCopyClusterLengths_GemmN, std::ignore,
              gemmBBlockCopyDescDataPerWriteGemmN, valid) =
-        calculateGemmBBlockCopyPerformanceParameters(param);
+        calculateGemmBBlockCopyPerformanceParameters(param, ctx);
 
     if (!valid)
       return std::make_tuple(0, false);
@@ -321,7 +324,7 @@ public:
     return std::make_tuple(lds_size, true);
   }
 
-  bool isValidXDLOPSGemm(TunableParams &param) {
+  bool isValidXDLOPSGemm(InitParams &param) {
     // TBD: support fp16/bf16
     const auto gemmKPackedPerBlock = param.gemmKPerBlock;
 
@@ -355,7 +358,7 @@ public:
   }
 
   // TBD review logic here for various layouts.
-  bool isValidParameter(TunableParams &param) {
+  bool isValidParameter(InitParams &param, ConvolutionContext &ctx) {
     int64_t gemmM = ctx.dimIndexVal["k"].second;
     int64_t gemmN = ctx.dimIndexVal["no"].second *
                     ctx.dimIndexVal["ho"].second * ctx.dimIndexVal["wo"].second;
@@ -386,7 +389,7 @@ public:
 
     // check blockwise copy of A matrix
     std::tie(std::ignore, std::ignore, std::ignore, std::ignore, valid) =
-        calculateGemmABlockCopyPerformanceParameters(param);
+        calculateGemmABlockCopyPerformanceParameters(param, ctx);
 
     if(!valid) {
       //llvm::errs() << "NOT VALID\n";
@@ -395,7 +398,7 @@ public:
 
     // check blockwise copy of B matrix
     std::tie(std::ignore, std::ignore, std::ignore, std::ignore, valid) =
-        calculateGemmBBlockCopyPerformanceParameters(param);
+        calculateGemmBBlockCopyPerformanceParameters(param, ctx);
 
     if(!valid) {
       //llvm::errs() << "NOT VALID\n";
@@ -403,7 +406,7 @@ public:
     }
 
     std::size_t lds_size = 0;
-    std::tie(lds_size, valid) = calculateLdsNumberOfByte(param);
+    std::tie(lds_size, valid) = calculateLdsNumberOfByte(param, ctx);
 
     if (!valid || (lds_size > 64 * 1024)) {
       //llvm::errs() << "NOT VALID\n";
@@ -414,9 +417,10 @@ public:
     return (valid && lds_size <= 64 * 1024);
   }
 
-  void customInit() override {
+  void paramsFromCtx(ConvolutionContext &ctx,
+                     std::map<std::string, int> &params) {
     // Check the following initial tuning parameters and find the valid one.
-    llvm::SmallVector<TunableParams, 10> initParameters = {
+    llvm::SmallVector<InitParams, 10> initParameters = {
         // M/block N/block K/block M/wave N/wave
         {128, 128, 16, 64, 64},
         {8, 64, 8, 8, 64},
@@ -425,9 +429,9 @@ public:
     };
 
     bool foundValidParameters = false;
-    TunableParams validParams;
+    InitParams validParams;
     for (auto &param : initParameters) {
-      if (isValidParameter(param)) {
+      if (isValidParameter(param, ctx)) {
         foundValidParameters = true;
         validParams = param;
         break;
@@ -464,13 +468,13 @@ public:
              gemmABlockCopyClusterLengths_GemmM,
              gemmABlockCopySrcDataPerRead_GemmK,
              gemmABlockCopyDstDataPerWrite_GemmM, std::ignore) =
-        calculateGemmABlockCopyPerformanceParameters(validParams);
+        calculateGemmABlockCopyPerformanceParameters(validParams, ctx);
 
     std::tie(gemmBBlockCopyClusterLengths_GemmK,
              gemmBBlockCopyClusterLengths_GemmN,
              gemmBBlockCopySrcDataPerRead_GemmN,
              gemmBBlockCopyDstDataPerWrite_GemmN, std::ignore) =
-        calculateGemmBBlockCopyPerformanceParameters(validParams);
+        calculateGemmBBlockCopyPerformanceParameters(validParams, ctx);
 
     params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] = gemmABlockCopyClusterLengths_GemmK;
     params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M"] = gemmABlockCopyClusterLengths_GemmM;
@@ -907,6 +911,20 @@ void EmitInterleaveAsteriskArrayAttr(llvm::raw_ostream &os, mlir::ArrayAttr &arr
   EmitInterleaveArrayAttrWithSeparator<T>(os, arrayAttr, " * ");
 }
 
+void ObtainConvDirection(FuncOp &f, miopen::ConvOpType &opType) {
+  f.walk([&opType](miopen::GridwiseGemmOp op) {
+    auto kernel_algorithm = op.getAttrOfType<StringAttr>("kernel_algorithm");
+    if (kernel_algorithm.getValue().find(StringRef("backward_data")) !=
+        StringRef::npos) {
+      opType = miopen::ConvOpType::Conv2DBwdDataOpType;
+    } else if (kernel_algorithm.getValue().find(StringRef("backward_weight")) !=
+               StringRef::npos) {
+      opType = miopen::ConvOpType::Conv2DBwdWeightOpType;
+    } else {
+      opType = miopen::ConvOpType::Conv2DOpType;
+    }
+  });
+}
 
 void ObtainModuleInfo(ModuleOp &m, std::string &layoutStr, llvm::SmallVector<std::string, 3> &tensorDescs) {
   // (TBD verifiying logic) The Module could contain multiple FuncOp, and inside each FuncOp there
@@ -977,6 +995,33 @@ void populateSeqVal(const ArrayAttr &seqAttr,
                            .getValue()[j]
                            .dyn_cast<IntegerAttr>()
                            .getInt());
+    }
+  }
+}
+
+void obtainInput1VecGemmKVectorizable(
+    miopen::ConvOpType opType,
+    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+    bool &input1GemmKVectorizable) {
+  // Vectorizable flag is opposite between forwad and bwd_data
+  if (opType == miopen::ConvOpType::Conv2DOpType) {
+    // When K is not the fastest changing dimension,
+    // gemmK dimension is vectorizable, gemmM is not, and vice versa.
+    // Vectorization width depending on which among C, Y, X be the fastest
+    // changing dimension.
+    if (dimIndexVal["k"].first == 3) {
+      input1GemmKVectorizable = false;
+    } else {
+      input1GemmKVectorizable = true;
+    }
+  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
+    // When K is the fastest changing dimension(3),
+    // gemmK dimension is vectorizable, gemmM is not, and vice versa.
+    // Vectorization width depending on length of K.
+    if (dimIndexVal["k"].first == 3) {
+      input1GemmKVectorizable = true;
+    } else {
+      input1GemmKVectorizable = false;
     }
   }
 }
@@ -1289,7 +1334,10 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlagsXDLOPS(Modul
   llvm::raw_string_ostream output(resultStr);
 
   for (auto f : m.getOps<FuncOp>()) {
-    f.walk([&output](miopen::GridwiseGemmOp op) {
+    miopen::ConvOpType opType;
+    ObtainConvDirection(f, opType);
+
+    f.walk([&output, opType](miopen::GridwiseGemmOp op) {
       llvm::StringMap<std::pair<size_t, int64_t>> dimIndexVal;
       // Filter
       auto filterLayoutAttr = op.getAttrOfType<ArrayAttr>("filter_layout");
@@ -1351,11 +1399,12 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlagsXDLOPS(Modul
       // - parameters which have heuristic-based values.
       // - parameters which are related to code generation.
 
-      ConvolutionContext convContext{dimIndexVal, strideVal, dilationVal,
-                                     paddingVal};
-      TunableParameters params;
-      params.setContext(convContext);
-      params.init();
+      ConvolutionContext convContext{opType, dimIndexVal, strideVal,
+                                     dilationVal, paddingVal};
+      std::map<std::string, int> parameters;
+      PopulateParams populateParams;
+      populateParams.paramsFromCtx(convContext, parameters);
+      TunableParameters params(parameters);
 
       // XXX disable for now.
       //// Input tensor.
@@ -1384,7 +1433,7 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlagsXDLOPS(Modul
       params.print(output);
       if (IsPopulateTunableParameters.getValue()) {
         // Populate YAML config file.
-        params.dump();
+        params.dump("tunable.yaml");
       }
 
       // Emit parameters derived from tunable parameters.

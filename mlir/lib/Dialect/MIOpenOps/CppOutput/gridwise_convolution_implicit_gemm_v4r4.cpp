@@ -31,9 +31,10 @@ namespace {
 // result string to keep C++ source / header / flags emission.
 std::string resultStr;
 
-class TunableParameters : public TunableParametersBase {
+class PopulateParams : public PopulateParamsBase {
 public:
-  virtual void customInit() override {
+  void paramsFromCtx(ConvolutionContext &ctx,
+                     std::map<std::string, int> &params) {
     // parameters truly tunable.
     params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] = 128;
     params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] = 128;
@@ -1182,8 +1183,11 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
       // - parameters which have heuristic-based values.
       // - parameters which are related to code generation.
 
-      TunableParameters params;
-      params.init();
+      ConvolutionContext convContext;
+      std::map<std::string, int> parameters;
+      PopulateParams populateParams;
+      populateParams.paramsFromCtx(convContext, parameters);
+      TunableParameters params(parameters);
 
       bool input1GemmKVectorizable = false;
       obtainInput1VecGemmKVectorizable(opType, dimIndexVal,
@@ -1263,7 +1267,7 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
       params.print(output);
       if (IsPopulateTunableParameters.getValue()) {
         // Populate YAML config file.
-        params.dump();
+        params.dump("tunable.yaml");
       }
 
       // Emit parameters derived from tunable parameters.

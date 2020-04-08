@@ -91,50 +91,52 @@ T integer_least_multiple(T x, T y)
 }
 
 struct ConvolutionContext {
+  mlir::miopen::ConvOpType opType;
   llvm::StringMap<std::pair<size_t, int64_t>> dimIndexVal;
   llvm::SmallVector<int64_t, 0> strideVal;
   llvm::SmallVector<int64_t, 0> dilationVal;
   llvm::SmallVector<int64_t, 0> paddingVal;
 };
 
-struct TunableParams {
-  int64_t gemmMPerBlock;
-  int64_t gemmNPerBlock;
-  int64_t gemmKPerBlock;
-  int64_t gemmMPerWave;
-  int64_t gemmNPerWave;
+class PopulateParamsBase {
+public:
+  struct InitParams {
+    int64_t gemmMPerBlock;
+    int64_t gemmNPerBlock;
+    int64_t gemmKPerBlock;
+    int64_t gemmMPerWave;
+    int64_t gemmNPerWave;
+  };
 };
 
-class TunableParametersBase {
+class TunableParameters {
 public:
-  TunableParametersBase(llvm::StringRef &&yamlFileName) : params(), configFileName(yamlFileName), ctx() {}
-  TunableParametersBase() : TunableParametersBase("tunable.yaml") {}
+  // Default constructor: empty map of params
+  TunableParameters() {}
 
-  void init() {
-    auto yaml = mlir::openInputFile(configFileName);
-    if (!yaml) {
-      customInit();
-    } else {
-      loadYAML(yaml->getBuffer());
-    }
+  // params constructor: populate with existing values
+  TunableParameters(std::map<std::string, int> parameters)
+      : params(parameters) {}
+
+  // yaml constrcutor: Use YAML to capture all parameters
+  TunableParameters(llvm::StringRef &&yamlFileName) {
+    auto yaml = mlir::openInputFile(yamlFileName);
+    assert(yaml != nullptr);
+    loadYAML(yaml->getBuffer());
   }
-
-  void setContext(ConvolutionContext &ctx) { this->ctx = ctx; }
-
-  virtual void customInit() = 0;
 
   void print(llvm::raw_ostream &os) {
     for (auto kv : params) {
       os << " -D" << kv.first << "=" << kv.second;
     }
   }
-  void dump() {
-    auto outputYAMLFile = mlir::openOutputFile(configFileName);
+  void dump(llvm::StringRef &&yamlFileName) {
+    auto outputYAMLFile = mlir::openOutputFile(yamlFileName);
     if (outputYAMLFile) {
       printYAML(outputYAMLFile->os());
       outputYAMLFile->keep();
     } else {
-      llvm::errs() << "\nOpen output file failed: " << configFileName << "\n";
+      llvm::errs() << "\nOpen output file failed: " << yamlFileName << "\n";
     }
   }
   void printYAML(llvm::raw_ostream &os) {
@@ -158,8 +160,6 @@ public:
   }
 protected:
   std::map<std::string, int> params;
-  llvm::StringRef configFileName;
-  ConvolutionContext ctx;
 };
 
 namespace llvm {
