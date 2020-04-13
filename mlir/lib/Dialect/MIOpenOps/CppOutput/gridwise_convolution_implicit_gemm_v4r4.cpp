@@ -978,10 +978,10 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenHeader(ModuleOp m)
           op.getAttrOfType<ArrayAttr>("filter_dimension");
       populateDimVal(filterLayoutAttr, filterDimensionAttr, dimIndexVal);
 
-      PopulateParamsBase::obtainInput1VecGemmKVectorizable(
-          opType, dimIndexVal, input1GemmKVectorizable);
-      PopulateParamsBase::obtainInput2VecGemmKVectorizable(
-          opType, dimIndexVal, input2GemmKVectorizable);
+      PopulateParamsBase::obtainGemmADimKVectorizable(opType, dimIndexVal,
+                                                      input1GemmKVectorizable);
+      PopulateParamsBase::obtainGemmBDimKVectorizable(opType, dimIndexVal,
+                                                      input2GemmKVectorizable);
     });
 
     EmitHeaderEpilogue(output, gridwiseGemmArguments, input1GemmKVectorizable,
@@ -1135,7 +1135,7 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
         // gemmM vectorizable. However, there is no parameters for vectorizing
         // gemmM dimension for matrix C. Do nothing here.
       } else {
-        PopulateParams::obtainOutputVecLen(opType, dimIndexVal, outputVecLen);
+        PopulateParams::obtainGemmCVecLen(opType, dimIndexVal, outputVecLen);
       }
 
       if ((outputVecLen > 0) && (outputVecLen % 4 == 0)) {

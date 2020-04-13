@@ -55,21 +55,18 @@ private:
            (params.gemmMPerWave * params.gemmNPerWave);
   }
 
-  // TBD: review logic here as they may be tied to NCHW layout.
   LogicalResult calculateGemmABlockCopyPerformanceParameters(
       InitParamsXDL *param, ConvolutionContext &ctx, DerivedParams &derived) {
     int64_t blockSize = obtainBlockSize(*param, waveSize);
     return calculateInputDerivedParams(param, blockSize, ctx, true, derived);
   }
 
-  // TBD: review logic here as they may be tied to NCHW layout.
   LogicalResult calculateGemmBBlockCopyPerformanceParameters(
       InitParamsXDL *param, ConvolutionContext &ctx, DerivedParams &derived) {
     int64_t blockSize = obtainBlockSize(*param, waveSize);
     return calculateInputDerivedParams(param, blockSize, ctx, false, derived);
   }
 
-  // TBD: review logic here as they may be tied to NCHW layout.
   LogicalResult calculateLdsNumberOfByte(InitParamsXDL *param,
                                          ConvolutionContext &ctx,
                                          size_t &ldsSize) {
@@ -1104,7 +1101,6 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlagsXDLOPS(Modul
       // TBD: be able to set data type.
       output << " -DMIOPEN_USE_FP32=1 -DMIOPEN_USE_FP16=0 -DMIOPEN_USE_BFP16=0";
 
-      // TBD: be able to set convolution direction.
       output << " -DCK_PARAM_PROBLEM_CONV_DIRECTION_FORWARD=1";
       output << " -DCK_PARAM_PROBLEM_CONV_DIRECTION_BACKWARD_DATA=0";
       output << " -DCK_PARAM_PROBLEM_CONV_DIRECTION_BACKWARD_WEIGHT=0";

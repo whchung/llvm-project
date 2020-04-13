@@ -120,7 +120,7 @@ public:
           clusterLenGemmPos2(0) {}
   };
 
-  static void obtainInput1VecGemmKVectorizable(
+  static void obtainGemmADimKVectorizable(
       mlir::miopen::ConvOpType opType,
       llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
       bool &input1GemmKVectorizable) {
@@ -148,9 +148,9 @@ public:
   }
 
   static void
-  obtainInput1VecLen(mlir::miopen::ConvOpType opType,
-                     llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                     int64_t &vecLen) {
+  obtainGemmAVecLen(mlir::miopen::ConvOpType opType,
+                    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+                    int64_t &vecLen) {
     // Vectorization length logic is the same for forward and bwd_data
     if (dimIndexVal["k"].first == 3) {
       vecLen = dimIndexVal["k"].second;
@@ -179,7 +179,7 @@ public:
     }
   }
 
-  static void obtainInput2VecGemmKVectorizable(
+  static void obtainGemmBDimKVectorizable(
       mlir::miopen::ConvOpType opType,
       llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
       bool &input2GemmKVectorizable) {
@@ -208,8 +208,8 @@ public:
   }
 
   static void
-  obtainNCHWVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                   int64_t &vecLen) {
+  obtainInputVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+                    int64_t &vecLen) {
     if (dimIndexVal["ni"].first == 3) {
       vecLen = dimIndexVal["ni"].second;
     } else if (dimIndexVal["ci"].first == 3) {
@@ -221,8 +221,8 @@ public:
     }
   }
   static void
-  obtainNKHWVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                   int64_t &vecLen) {
+  obtainOutputVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+                     int64_t &vecLen) {
     if (dimIndexVal["ko"].first == 3) {
       vecLen = dimIndexVal["ko"].second;
     } else if (dimIndexVal["ko"].first == 0) {
@@ -251,24 +251,24 @@ public:
   }
 
   static void
-  obtainInput2VecLen(mlir::miopen::ConvOpType opType,
-                     llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                     int64_t &vecLen) {
+  obtainGemmBVecLen(mlir::miopen::ConvOpType opType,
+                    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+                    int64_t &vecLen) {
     if (opType == mlir::miopen::ConvOpType::Conv2DOpType) {
-      obtainNCHWVecLen(dimIndexVal, vecLen);
+      obtainInputVecLen(dimIndexVal, vecLen);
     } else if (opType == mlir::miopen::ConvOpType::Conv2DBwdDataOpType) {
-      obtainNKHWVecLen(dimIndexVal, vecLen);
+      obtainOutputVecLen(dimIndexVal, vecLen);
     }
   }
 
   static void
-  obtainOutputVecLen(mlir::miopen::ConvOpType opType,
-                     llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                     int64_t &vecLen) {
+  obtainGemmCVecLen(mlir::miopen::ConvOpType opType,
+                    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
+                    int64_t &vecLen) {
     if (opType == mlir::miopen::ConvOpType::Conv2DOpType) {
-      obtainNKHWVecLen(dimIndexVal, vecLen);
+      obtainOutputVecLen(dimIndexVal, vecLen);
     } else if (opType == mlir::miopen::ConvOpType::Conv2DBwdDataOpType) {
-      obtainNCHWVecLen(dimIndexVal, vecLen);
+      obtainInputVecLen(dimIndexVal, vecLen);
     }
   }
 
@@ -282,13 +282,13 @@ protected:
     bool gemmPos1Vectorizable = false;
     int64_t vectorizableLength = 0;
     if (isGemmA) {
-      obtainInput1VecGemmKVectorizable(ctx.opType, ctx.dimIndexVal,
-                                       gemmPos1Vectorizable);
-      obtainInput1VecLen(ctx.opType, ctx.dimIndexVal, vectorizableLength);
+      obtainGemmADimKVectorizable(ctx.opType, ctx.dimIndexVal,
+                                  gemmPos1Vectorizable);
+      obtainGemmAVecLen(ctx.opType, ctx.dimIndexVal, vectorizableLength);
     } else {
-      obtainInput2VecGemmKVectorizable(ctx.opType, ctx.dimIndexVal,
-                                       gemmPos1Vectorizable);
-      obtainInput2VecLen(ctx.opType, ctx.dimIndexVal, vectorizableLength);
+      obtainGemmBDimKVectorizable(ctx.opType, ctx.dimIndexVal,
+                                  gemmPos1Vectorizable);
+      obtainGemmBVecLen(ctx.opType, ctx.dimIndexVal, vectorizableLength);
     }
 
     // calculate threadwise copy size
