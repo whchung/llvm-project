@@ -32,37 +32,112 @@ namespace {
 std::string resultStr;
 
 class PopulateParams : public PopulateParamsBase {
+private:
+  struct InitParamsNonXDL : InitParams {
+    InitParamsNonXDL(int64_t mPerBlock, int64_t nPerBlock, int64_t kPerBlock,
+                     int64_t mPerThread, int64_t nPerThread, int64_t bSize)
+        : InitParams{mPerBlock, nPerBlock, kPerBlock},
+          gemmMPerThread(mPerThread), gemmNPerThread(nPerThread),
+          blockSize(bSize) {}
+    int64_t gemmMPerThread;
+    int64_t gemmNPerThread;
+    int64_t blockSize;
+  };
+
+  llvm::SmallVector<InitParamsNonXDL, 4> initParameters = {
+      // M/block N/block K/block M/thread N/thread blockSize
+      {128, 128, 8, 4, 4, 256},
+      {128, 64, 8, 4, 4, 128},
+      {64, 128, 4, 4, 4, 128},
+      {32, 32, 4, 2, 2, 64},
+  };
+
+  LogicalResult
+  calculateGemmABlockCopyPerformanceParameters(InitParamsNonXDL *param,
+                                               ConvolutionContext &ctx,
+                                               DerivedParams &derived) {
+    return calculateInputDerivedParams(param, param->blockSize, ctx, true,
+                                       derived);
+  }
+
+  LogicalResult
+  calculateGemmBBlockCopyPerformanceParameters(InitParamsNonXDL *param,
+                                               ConvolutionContext &ctx,
+                                               DerivedParams &derived) {
+
+    return calculateInputDerivedParams(param, param->blockSize, ctx, false,
+                                       derived);
+  }
+
 public:
   void paramsFromCtx(ConvolutionContext &ctx,
                      std::map<std::string, int> &params) {
+    LogicalResult res(LogicalResult::Failure);
+    InitParamsNonXDL validParams{0, 0, 0, 0, 0, 0};
+    DerivedParams gemmADerivedParam;
+    DerivedParams gemmBDerivedParam;
+
+    GemmSize gemmSize;
+    obtainGemmSize(ctx, gemmSize);
+
+    for (auto &params : initParameters) {
+
+      res = isValidGemm(&params, gemmSize);
+      if (failed(res)) {
+        continue;
+      }
+
+      res = calculateGemmABlockCopyPerformanceParameters(&params, ctx,
+                                                         gemmADerivedParam);
+      if (failed(res)) {
+        continue;
+      }
+
+      res = calculateGemmBBlockCopyPerformanceParameters(&params, ctx,
+                                                         gemmBDerivedParam);
+
+      if (failed(res)) {
+        continue;
+      }
+
+      validParams = params;
+      break;
+    }
+
+    if (failed(res)) {
+      // All initParameters have failed, shouldn't happen
+      llvm_unreachable("FATAL ERROR! COULD NOT FIND VALID TUNING PARAMETERS!");
+    }
+
     // parameters truly tunable.
-    params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] = 128;
-    params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] = 128;
-    params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] = 8;
-    params["CK_PARAM_TUNABLE_GEMM_M_PER_THREAD"] = 4;
-    params["CK_PARAM_TUNABLE_GEMM_N_PER_THREAD"] = 4;
-    params["CK_PARAM_TUNABLE_BLOCK_SIZE"] = 256;
+    params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] = validParams.gemmMPerBlock;
+    params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] = validParams.gemmNPerBlock;
+    params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] = validParams.gemmKPerBlock;
+    params["CK_PARAM_TUNABLE_GEMM_M_PER_THREAD"] = validParams.gemmMPerThread;
+    params["CK_PARAM_TUNABLE_GEMM_N_PER_THREAD"] = validParams.gemmNPerThread;
 
-    // parameters fixed.
-    params["CK_PARAM_TUNABLE_GEMM_M_LEVEL0_CLUSTER"] = 4;
-    params["CK_PARAM_TUNABLE_GEMM_N_LEVEL0_CLUSTER"] = 4;
-    params["CK_PARAM_TUNABLE_GEMM_M_LEVEL1_CLUSTER"] = 4;
-    params["CK_PARAM_TUNABLE_GEMM_N_LEVEL1_CLUSTER"] = 4;
+    // parameters derivable from tunable parameters.
+    params["CK_PARAM_TUNABLE_BLOCK_SIZE"] = validParams.blockSize;
+    params["CK_PARAM_DEPENDENT_GRID_SIZE"] =
+        obtainGridSize(gemmSize, &validParams);
 
-    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_DST_DATA_PER_WRITE_GEMM_M"] = 1;
-    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_DST_DATA_PER_WRITE_GEMM_N"] = 1;
+    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] =
+        gemmADerivedParam.clusterLenGemmPos1;
+    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M"] =
+        gemmADerivedParam.clusterLenGemmPos2;
+    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_SRC_DATA_PER_READ_GEMM"] =
+        gemmADerivedParam.srcDataPerRead;
+    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_DST_DATA_PER_WRITE_GEMM_M"] =
+        gemmADerivedParam.dstDataPerWrite;
 
-    // parameters vary per data layout.
-    // specify the most conservative parameters first.
-    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] = 2;
-    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M"] = 128;
-    params["CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_SRC_DATA_PER_READ_GEMM"] = 1;
-
-    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] = 2;
-    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_N"] = 128;
-    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_SRC_DATA_PER_READ_GEMM"] = 1;
-
-    params["CK_PARAM_TUNABLE_GEMM_C_THREAD_COPY_DST_DATA_PER_WRITE_GEMM_N1"] = 1;
+    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K"] =
+        gemmBDerivedParam.clusterLenGemmPos1;
+    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_N"] =
+        gemmBDerivedParam.clusterLenGemmPos2;
+    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_SRC_DATA_PER_READ_GEMM"] =
+        gemmBDerivedParam.srcDataPerRead;
+    params["CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_DST_DATA_PER_WRITE_GEMM_N"] =
+        gemmBDerivedParam.dstDataPerWrite;
   }
 };
 
@@ -731,153 +806,6 @@ void populateSeqVal(const ArrayAttr &seqAttr,
   }
 }
 
-void obtainInput1VecGemmKVectorizable(
-    miopen::ConvOpType opType,
-    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-    bool &input1GemmKVectorizable) {
-  // Vectorizable flag is opposite between forwad and bwd_data
-  if (opType == miopen::ConvOpType::Conv2DOpType) {
-    // When K is not the fastest changing dimension,
-    // gemmK dimension is vectorizable, gemmM is not, and vice versa.
-    // Vectorization width depending on which among C, Y, X be the fastest
-    // changing dimension.
-    if (dimIndexVal["k"].first == 3) {
-      input1GemmKVectorizable = false;
-    } else {
-      input1GemmKVectorizable = true;
-    }
-  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    // When K is the fastest changing dimension(3),
-    // gemmK dimension is vectorizable, gemmM is not, and vice versa.
-    // Vectorization width depending on length of K.
-    if (dimIndexVal["k"].first == 3) {
-      input1GemmKVectorizable = true;
-    } else {
-      input1GemmKVectorizable = false;
-    }
-  }
-}
-
-void obtainInput1VecLen(
-    miopen::ConvOpType opType,
-    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal, int64_t &vecLen) {
-  // Vectorization length logic is the same for forward and bwd_data
-  if (dimIndexVal["k"].first == 3) {
-    vecLen = dimIndexVal["k"].second;
-  } else if (dimIndexVal["k"].first == 0) {
-    // dimKF is the lowest changing dimension, which means dimC/dimY/dimX
-    vecLen = dimIndexVal["c"].second * dimIndexVal["y"].second *
-             dimIndexVal["x"].second;
-  } else if (dimIndexVal["k"].first == 1) {
-    // K's position is at 1, vectorization legnth is last two dimension
-    if (dimIndexVal["c"].first == 0) {
-      vecLen = dimIndexVal["y"].second * dimIndexVal["x"].second;
-    } else if (dimIndexVal["y"].first == 0) {
-      vecLen = dimIndexVal["c"].second * dimIndexVal["x"].second;
-    } else {
-      vecLen = dimIndexVal["c"].second * dimIndexVal["y"].second;
-    }
-  } else {
-    // K's position is 2, vectorization legnth is last dimension
-    if (dimIndexVal["c"].first == 3) {
-      vecLen = dimIndexVal["c"].second;
-    } else if (dimIndexVal["y"].first == 3) {
-      vecLen = dimIndexVal["y"].second;
-    } else {
-      vecLen = dimIndexVal["x"].second;
-    }
-  }
-}
-
-void obtainInput2VecGemmKVectorizable(
-    miopen::ConvOpType opType,
-    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-    bool &input2GemmKVectorizable) {
-  // Vectorizable flag is opposite between forwad and bwd_data
-  if (opType == miopen::ConvOpType::Conv2DOpType) {
-    // For input tensor.
-    // When C is the fastest changing dimension,
-    // gemmK dimension is vectorizable, gemmN is not, and vice versa.
-    // Vectorization width depending on length of C.
-    if (dimIndexVal["ci"].first == 3) {
-      input2GemmKVectorizable = true;
-    } else {
-      input2GemmKVectorizable = false;
-    }
-  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    // For output tensor.
-    // When K is the fastest changing dimension(3),
-    // gemmK dimension is vectorizable, gemmN is not, and vice versa.
-    // Vectorization width depending on length of K.
-    if (dimIndexVal["ko"].first == 3) {
-      input2GemmKVectorizable = true;
-    } else {
-      input2GemmKVectorizable = false;
-    }
-  }
-}
-
-void obtainNCHWVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                      int64_t &vecLen) {
-  if (dimIndexVal["ni"].first == 3) {
-    vecLen = dimIndexVal["ni"].second;
-  } else if (dimIndexVal["ci"].first == 3) {
-    vecLen = dimIndexVal["ci"].second;
-  } else {
-    // Not vectorizable
-    // TODO(optimize): For 1x1, stride 1, pad 0 conv, vecLen is hi * wi
-    vecLen = 1;
-  }
-}
-void obtainNKHWVecLen(llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal,
-                      int64_t &vecLen) {
-  if (dimIndexVal["ko"].first == 3) {
-    vecLen = dimIndexVal["ko"].second;
-  } else if (dimIndexVal["ko"].first == 0) {
-    // dimKO is the lowest changing dimension, which means dimN/dimHo/dimWo
-    vecLen = dimIndexVal["no"].second * dimIndexVal["ho"].second *
-             dimIndexVal["wo"].second;
-  } else if (dimIndexVal["ko"].first == 1) {
-    // Ko's position is at 1, vectorization legnth is last two dimensions
-    if (dimIndexVal["no"].first == 0) {
-      vecLen = dimIndexVal["ho"].second * dimIndexVal["wo"].second;
-    } else if (dimIndexVal["ho"].first == 0) {
-      vecLen = dimIndexVal["no"].second * dimIndexVal["wo"].second;
-    } else {
-      vecLen = dimIndexVal["no"].second * dimIndexVal["ho"].second;
-    }
-  } else {
-    // K's position is 2, vectorization legnth is last dimension
-    if (dimIndexVal["no"].first == 3) {
-      vecLen = dimIndexVal["no"].second;
-    } else if (dimIndexVal["ho"].first == 3) {
-      vecLen = dimIndexVal["ho"].second;
-    } else {
-      vecLen = dimIndexVal["wo"].second;
-    }
-  }
-}
-
-void obtainInput2VecLen(
-    miopen::ConvOpType opType,
-    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal, int64_t &vecLen) {
-  if (opType == miopen::ConvOpType::Conv2DOpType) {
-    obtainNCHWVecLen(dimIndexVal, vecLen);
-  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    obtainNKHWVecLen(dimIndexVal, vecLen);
-  }
-}
-
-void obtainOutputVecLen(
-    miopen::ConvOpType opType,
-    llvm::StringMap<std::pair<size_t, int64_t>> &dimIndexVal, int64_t &vecLen) {
-  if (opType == miopen::ConvOpType::Conv2DOpType) {
-    obtainNKHWVecLen(dimIndexVal, vecLen);
-  } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-    obtainNCHWVecLen(dimIndexVal, vecLen);
-  }
-}
-
 } // namespace
 
 std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenHeader(ModuleOp m) {
@@ -1050,10 +978,10 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenHeader(ModuleOp m)
           op.getAttrOfType<ArrayAttr>("filter_dimension");
       populateDimVal(filterLayoutAttr, filterDimensionAttr, dimIndexVal);
 
-      obtainInput1VecGemmKVectorizable(opType, dimIndexVal,
-                                       input1GemmKVectorizable);
-      obtainInput2VecGemmKVectorizable(opType, dimIndexVal,
-                                       input2GemmKVectorizable);
+      PopulateParamsBase::obtainInput1VecGemmKVectorizable(
+          opType, dimIndexVal, input1GemmKVectorizable);
+      PopulateParamsBase::obtainInput2VecGemmKVectorizable(
+          opType, dimIndexVal, input2GemmKVectorizable);
     });
 
     EmitHeaderEpilogue(output, gridwiseGemmArguments, input1GemmKVectorizable,
@@ -1177,67 +1105,24 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
         output << " -DCK_PARAM_PROBLEM_CONV_DIRECTION_BACKWARD_WEIGHT=0";
       }
 
-      // distinguish between:
-      // - parameters truly need to be tuned.
-      // - parameters deducible via transformations.
-      // - parameters which have heuristic-based values.
-      // - parameters which are related to code generation.
-
-      ConvolutionContext convContext;
+      ConvolutionContext convContext{opType, dimIndexVal, strideVal,
+                                     dilationVal, paddingVal};
       std::map<std::string, int> parameters;
       PopulateParams populateParams;
       populateParams.paramsFromCtx(convContext, parameters);
+
+      // parameters fixed.
+      parameters["CK_PARAM_TUNABLE_GEMM_M_LEVEL0_CLUSTER"] = 4;
+      parameters["CK_PARAM_TUNABLE_GEMM_N_LEVEL0_CLUSTER"] = 4;
+      parameters["CK_PARAM_TUNABLE_GEMM_M_LEVEL1_CLUSTER"] = 4;
+      parameters["CK_PARAM_TUNABLE_GEMM_N_LEVEL1_CLUSTER"] = 4;
+
+      // paeterrameters varies depend on layout but set as fixed now
+      parameters
+          ["CK_PARAM_TUNABLE_GEMM_C_THREAD_COPY_DST_DATA_PER_WRITE_GEMM_N1"] =
+              1;
+
       TunableParameters params(parameters);
-
-      bool input1GemmKVectorizable = false;
-      obtainInput1VecGemmKVectorizable(opType, dimIndexVal,
-                                       input1GemmKVectorizable);
-
-      // Determine input1's vectorization dimensions and lengths.
-      int64_t input1VecLen = 0;
-      obtainInput1VecLen(opType, dimIndexVal, input1VecLen);
-
-      int perThreadOpsA = params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] * params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / params["CK_PARAM_TUNABLE_BLOCK_SIZE"];
-      int perThreadOpsAVectorLength = 1;
-      if ((input1VecLen > 0) && (input1VecLen % 4 == 0)) {
-        perThreadOpsAVectorLength = gcd(4, perThreadOpsA);
-      } else if ((input1VecLen > 0) && (input1VecLen % 2 == 0)) {
-        perThreadOpsAVectorLength = gcd(2, perThreadOpsA);
-      }
-      int perThreadOpsANonVectorizedLength = perThreadOpsA / perThreadOpsAVectorLength;
-      params.setValue("CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_SRC_DATA_PER_READ_GEMM", perThreadOpsAVectorLength);
-      if (input1GemmKVectorizable) {
-        params.setValue("CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M", params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] / perThreadOpsANonVectorizedLength);
-        params.setValue("CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K", params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / perThreadOpsAVectorLength);
-      } else {
-        params.setValue("CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K", params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / perThreadOpsANonVectorizedLength);
-        params.setValue("CK_PARAM_TUNABLE_GEMM_A_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_M", params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"] / perThreadOpsAVectorLength);
-      }
-
-      // Determine input2's vectorization dimensions and lengths.
-      bool input2GemmKVectorizable = false;
-      obtainInput2VecGemmKVectorizable(opType, dimIndexVal,
-                                       input2GemmKVectorizable);
-
-      int64_t input2VecLen = 0;
-      obtainInput2VecLen(opType, dimIndexVal, input2VecLen);
-
-      int perThreadOpsB = params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] * params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / params["CK_PARAM_TUNABLE_BLOCK_SIZE"];
-      int perThreadOpsBVectorLength = 1;
-      if ((input2VecLen > 0) && (input2VecLen % 4 == 0)) {
-        perThreadOpsBVectorLength = gcd(4, perThreadOpsB);
-      } else if ((input2VecLen > 0) && (input2VecLen % 2 == 0)) {
-        perThreadOpsBVectorLength = gcd(2, perThreadOpsB);
-      }
-      int perThreadOpsBNonVectorizedLength = perThreadOpsB / perThreadOpsBVectorLength;
-      params.setValue("CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_SRC_DATA_PER_READ_GEMM", perThreadOpsBVectorLength);
-      if (input2GemmKVectorizable) {
-        params.setValue("CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_N", params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] / perThreadOpsBNonVectorizedLength);
-        params.setValue("CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K", params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / perThreadOpsBVectorLength);
-      } else {
-        params.setValue("CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_K", params["CK_PARAM_TUNABLE_GEMM_K_PER_BLOCK"] / perThreadOpsBNonVectorizedLength);
-        params.setValue("CK_PARAM_TUNABLE_GEMM_B_BLOCK_COPY_CLUSTER_LENGTHS_GEMM_N", params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"] / perThreadOpsBVectorLength);
-      }
 
       // Output tensor.
       int64_t outputVecLen = 0;
@@ -1250,7 +1135,7 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
         // gemmM vectorizable. However, there is no parameters for vectorizing
         // gemmM dimension for matrix C. Do nothing here.
       } else {
-        obtainOutputVecLen(opType, dimIndexVal, outputVecLen);
+        PopulateParams::obtainOutputVecLen(opType, dimIndexVal, outputVecLen);
       }
 
       if ((outputVecLen > 0) && (outputVecLen % 4 == 0)) {
@@ -1269,23 +1154,6 @@ std::unique_ptr<llvm::StringRef> mlir::translateModuleToMIOpenCFlags(ModuleOp m)
         // Populate YAML config file.
         params.dump("tunable.yaml");
       }
-
-      // Emit parameters derived from tunable parameters.
-      int64_t gemmMPerBlock = params["CK_PARAM_TUNABLE_GEMM_M_PER_BLOCK"];
-      int64_t gemmNPerBlock = params["CK_PARAM_TUNABLE_GEMM_N_PER_BLOCK"];
-      int64_t gemmM = 0;
-      int64_t gemmN = 0;
-      if (opType == miopen::ConvOpType::Conv2DOpType) {
-        gemmM = dimIndexVal["ko"].second;
-        gemmN = dimIndexVal["no"].second * dimIndexVal["ho"].second *
-                dimIndexVal["wo"].second;
-      } else if (opType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-        gemmM = dimIndexVal["no"].second * dimIndexVal["ho"].second *
-                dimIndexVal["wo"].second;
-        gemmN = dimIndexVal["ko"].second;
-      }
-      int64_t gridSize = (gemmM / gemmMPerBlock) * (gemmN / gemmNPerBlock);
-      output << " -DCK_PARAM_DEPENDENT_GRID_SIZE=" << gridSize;
 
       // Emit code-gen related macros.
       output << " -DCK_THREADWISE_GEMM_USE_AMD_INLINE_ASM=1";
