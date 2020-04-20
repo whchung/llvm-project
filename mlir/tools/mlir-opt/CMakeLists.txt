@@ -33,6 +33,7 @@ set(LIBS
   MLIRLLVMIR
   MLIRLoopOps
   MLIRMIOpenOps
+  MLIRMIOpenOpsToLLVM
   MLIRMIOpenTransforms
   MLIRNVVMIR
   MLIROptMain
