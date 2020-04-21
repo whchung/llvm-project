@@ -108,7 +108,7 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
         }
       }
 
-      llvm::SmallVector<NamedAttribute, 2> sourceNonKDimAttr{
+      llvm::SmallVector<NamedAttribute, 2> sourceProbCYXDimAttr{
           b.getNamedAttr("source_dimensions",
                          b.getArrayAttr(ArrayRef<Attribute>(nonKDims.begin(),
                                                             nonKDims.end()))),
@@ -116,25 +116,25 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
                          b.getArrayAttr(ArrayRef<Attribute>(
                              nonKDimNames.begin(), nonKDimNames.end())))};
       if (kDim.getInt() != 0 && kDim.getInt() != 3) {
-        sourceNonKDimAttr.push_back(
+        sourceProbCYXDimAttr.push_back(
             b.getNamedAttr("transformation", b.getStringAttr("Merge")));
       } else {
-        sourceNonKDimAttr.push_back(
+        sourceProbCYXDimAttr.push_back(
             b.getNamedAttr("transformation", b.getStringAttr("Unfold")));
       }
 
-      llvm::SmallVector<NamedAttribute, 3> sourceKDimAttr{
+      llvm::SmallVector<NamedAttribute, 3> sourceProbKDimAttr{
           b.getNamedAttr("transformation", b.getStringAttr("PassThrough")),
           b.getNamedAttr("source_dimensions", b.getArrayAttr({kDim})),
           b.getNamedAttr("source_names", b.getArrayAttr({kDimName}))};
 
-      llvm::SmallVector<NamedAttribute, 3> targetKDimAttr{
+      llvm::SmallVector<NamedAttribute, 3> targetGemm0DimAttr{
           b.getNamedAttr("dimensions",
                          b.getArrayAttr({b.getI32IntegerAttr(0)})),
           b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
                                       arg0TargetLayoutName0)}))};
 
-      llvm::SmallVector<NamedAttribute, 3> targetNonKDimAttr{
+      llvm::SmallVector<NamedAttribute, 3> targetGemm1DimAttr{
           b.getNamedAttr("dimensions",
                          b.getArrayAttr({b.getI32IntegerAttr(1)})),
           b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
@@ -143,21 +143,24 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
       llvm::SmallVector<NamedAttribute, 0> layoutAttr0;
       llvm::SmallVector<NamedAttribute, 0> layoutAttr1;
 
-      if (convOpType == miopen::ConvOpType::Conv2DBwdDataOpType) {
-        layoutAttr0.append(targetKDimAttr.begin(), targetKDimAttr.end());
-        layoutAttr0.append(sourceKDimAttr.begin(), sourceKDimAttr.end());
-        layoutAttr1.append(targetNonKDimAttr.begin(), targetNonKDimAttr.end());
-        layoutAttr1.append(sourceNonKDimAttr.begin(), sourceNonKDimAttr.end());
-      } else if (convOpType == miopen::ConvOpType::Conv2DOpType) {
-        layoutAttr0.append(targetKDimAttr.begin(), targetKDimAttr.end());
-        layoutAttr0.append(sourceNonKDimAttr.begin(), sourceNonKDimAttr.end());
-        layoutAttr1.append(targetNonKDimAttr.begin(), targetNonKDimAttr.end());
-        layoutAttr1.append(sourceKDimAttr.begin(), sourceKDimAttr.end());
-      } else if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
-        layoutAttr0.append(targetKDimAttr.begin(), targetKDimAttr.end());
-        layoutAttr0.append(sourceKDimAttr.begin(), sourceKDimAttr.end());
-        layoutAttr1.append(targetNonKDimAttr.begin(), targetNonKDimAttr.end());
-        layoutAttr1.append(sourceNonKDimAttr.begin(), sourceNonKDimAttr.end());
+      if (convOpType == miopen::ConvOpType::Conv2DOpType) {
+        layoutAttr0.append(targetGemm0DimAttr.begin(),
+                           targetGemm0DimAttr.end());
+        layoutAttr0.append(sourceProbCYXDimAttr.begin(),
+                           sourceProbCYXDimAttr.end());
+        layoutAttr1.append(targetGemm1DimAttr.begin(),
+                           targetGemm1DimAttr.end());
+        layoutAttr1.append(sourceProbKDimAttr.begin(),
+                           sourceProbKDimAttr.end());
+      } else {
+        layoutAttr0.append(targetGemm0DimAttr.begin(),
+                           targetGemm0DimAttr.end());
+        layoutAttr0.append(sourceProbKDimAttr.begin(),
+                           sourceProbKDimAttr.end());
+        layoutAttr1.append(targetGemm1DimAttr.begin(),
+                           targetGemm1DimAttr.end());
+        layoutAttr1.append(sourceProbCYXDimAttr.begin(),
+                           sourceProbCYXDimAttr.end());
       }
 
       transformedFilterAttrs.push_back(b.getNamedAttr(
@@ -686,71 +689,62 @@ struct Conv2DRewritePattern : public OpRewritePattern<T> {
         }
       }
 
-      if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
-        transformedOutputAttrs.push_back(b.getNamedAttr(
-            "layout",
-            b.getArrayAttr({
-
-                // Part 1: Merge.
-                b.getDictionaryAttr({
-                    b.getNamedAttr("dimensions",
-                                   b.getArrayAttr({b.getI32IntegerAttr(0)})),
-                    b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                                arg2TargetLayoutName0)})),
-                    b.getNamedAttr("transformation", b.getStringAttr("Merge")),
-                    b.getNamedAttr("source_dimensions",
-                                   b.getArrayAttr(ArrayRef<Attribute>(
-                                       nonKDims.begin(), nonKDims.end()))),
-                    b.getNamedAttr(
-                        "source_names",
-                        b.getArrayAttr(ArrayRef<Attribute>(
-                            nonKDimNames.begin(), nonKDimNames.end()))),
-                }),
-
-                // Part 2: Passthrough.
-                b.getDictionaryAttr({
-                    b.getNamedAttr("dimensions",
-                                   b.getArrayAttr({b.getI32IntegerAttr(1)})),
-                    b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                                arg2TargetLayoutName1)})),
-                    b.getNamedAttr("transformation",
-                                   b.getStringAttr("PassThrough")),
-                    b.getNamedAttr("source_dimensions", b.getArrayAttr({kDim})),
-                    b.getNamedAttr("source_names", b.getArrayAttr({kDimName})),
-                })})));
-      } else {
-        transformedOutputAttrs.push_back(b.getNamedAttr(
-            "layout",
-            b.getArrayAttr(
-                {// Part 1: Passthrough.
-                 b.getDictionaryAttr({
-                     b.getNamedAttr("dimensions",
-                                    b.getArrayAttr({b.getI32IntegerAttr(0)})),
-                     b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                                 arg2TargetLayoutName0)})),
-                     b.getNamedAttr("transformation",
-                                    b.getStringAttr("PassThrough")),
-                     b.getNamedAttr("source_dimensions",
-                                    b.getArrayAttr({kDim})),
-                     b.getNamedAttr("source_names", b.getArrayAttr({kDimName})),
-                 }),
-
-                 // Part 2: Merge.
-                 b.getDictionaryAttr({
-                     b.getNamedAttr("dimensions",
-                                    b.getArrayAttr({b.getI32IntegerAttr(1)})),
-                     b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
-                                                 arg2TargetLayoutName1)})),
-                     b.getNamedAttr("transformation", b.getStringAttr("Merge")),
-                     b.getNamedAttr("source_dimensions",
-                                    b.getArrayAttr(ArrayRef<Attribute>(
-                                        nonKDims.begin(), nonKDims.end()))),
-                     b.getNamedAttr(
-                         "source_names",
+      llvm::SmallVector<NamedAttribute, 3> sourceProbNHoWoDimAttr{
+          b.getNamedAttr("source_dimensions",
+                         b.getArrayAttr(ArrayRef<Attribute>(nonKDims.begin(),
+                                                            nonKDims.end()))),
+          b.getNamedAttr("source_names",
                          b.getArrayAttr(ArrayRef<Attribute>(
                              nonKDimNames.begin(), nonKDimNames.end()))),
-                 })})));
+          b.getNamedAttr("transformation", b.getStringAttr("Merge"))};
+
+      llvm::SmallVector<NamedAttribute, 3> sourceProbKDimAttr{
+          b.getNamedAttr("transformation", b.getStringAttr("PassThrough")),
+          b.getNamedAttr("source_dimensions", b.getArrayAttr({kDim})),
+          b.getNamedAttr("source_names", b.getArrayAttr({kDimName}))};
+
+      llvm::SmallVector<NamedAttribute, 3> targetGemm0DimAttr{
+          b.getNamedAttr("dimensions",
+                         b.getArrayAttr({b.getI32IntegerAttr(0)})),
+          b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                      arg2TargetLayoutName0)}))};
+
+      llvm::SmallVector<NamedAttribute, 3> targetGemm1DimAttr{
+          b.getNamedAttr("dimensions",
+                         b.getArrayAttr({b.getI32IntegerAttr(1)})),
+          b.getNamedAttr("names", b.getArrayAttr({b.getStringAttr(
+                                      arg2TargetLayoutName1)}))};
+
+      llvm::SmallVector<NamedAttribute, 0> layoutAttr0;
+      llvm::SmallVector<NamedAttribute, 0> layoutAttr1;
+
+      if (convOpType == miopen::ConvOpType::Conv2DBwdWeightOpType) {
+        layoutAttr0.append(targetGemm0DimAttr.begin(),
+                           targetGemm0DimAttr.end());
+        layoutAttr0.append(sourceProbNHoWoDimAttr.begin(),
+                           sourceProbNHoWoDimAttr.end());
+        layoutAttr1.append(targetGemm1DimAttr.begin(),
+                           targetGemm1DimAttr.end());
+        layoutAttr1.append(sourceProbKDimAttr.begin(),
+                           sourceProbKDimAttr.end());
+      } else {
+        layoutAttr0.append(targetGemm0DimAttr.begin(),
+                           targetGemm0DimAttr.end());
+        layoutAttr0.append(sourceProbKDimAttr.begin(),
+                           sourceProbKDimAttr.end());
+        layoutAttr1.append(targetGemm1DimAttr.begin(),
+                           targetGemm1DimAttr.end());
+        layoutAttr1.append(sourceProbNHoWoDimAttr.begin(),
+                           sourceProbNHoWoDimAttr.end());
       }
+
+      transformedOutputAttrs.push_back(b.getNamedAttr(
+          "layout", b.getArrayAttr({
+                        b.getDictionaryAttr({ArrayRef<NamedAttribute>(
+                            layoutAttr0.begin(), layoutAttr0.end())}),
+                        b.getDictionaryAttr({ArrayRef<NamedAttribute>(
+                            layoutAttr1.begin(), layoutAttr1.end())}),
+                    })));
     }
 
     // set source_layout attribute.
