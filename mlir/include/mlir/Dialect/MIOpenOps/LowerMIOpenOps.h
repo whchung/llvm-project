@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/Dialect/MIOpenOps/MIOpenOps.h"
 #include "mlir/Dialect/MIOpenOps/Passes.h"
@@ -1409,7 +1410,29 @@ struct BlockwiseGemmRewritePattern : public OpRewritePattern<miopen::BlockwiseGe
     //     ThreadwiseGemmTransANormalBNormalC<decltype(a_thread_mtx),
     //                                        decltype(b_thread_mtx),
     //                                        decltype(c_thread_mtx)>{};
-    lb.create<miopen::ThreadwiseGemmOp>(op.getLoc(), threadAAllocOp, threadBAllocOp, op.getOperand(2));
+
+    // TODO: Update hard-coded gemmA/B/C shape to actual shapes when
+    // threadwisecopy done
+    ArrayRef<int64_t> threadAShape = {8, 16};
+    auto threadA2DMemRefType =
+        MemRefType::get(threadAShape, b.getF32Type(), {}, registerMemorySpace);
+    auto threadA2DViewOp = lb.create<ViewOp>(op.getLoc(), threadA2DMemRefType,
+                                             threadAAllocOp, ValueRange{});
+
+    ArrayRef<int64_t> threadBShape = {8, 16};
+    auto threadB2DMemRefType =
+        MemRefType::get(threadBShape, b.getF32Type(), {}, registerMemorySpace);
+    auto threadB2DViewOp = lb.create<ViewOp>(op.getLoc(), threadB2DMemRefType,
+                                             threadBAllocOp, ValueRange{});
+
+    ArrayRef<int64_t> threadCShape = {16, 16};
+    auto threadC2DMemRefType =
+        MemRefType::get(threadCShape, b.getF32Type(), {}, registerMemorySpace);
+    auto threadC2DViewOp = lb.create<ViewOp>(op.getLoc(), threadC2DMemRefType,
+                                             op.getOperand(2), ValueRange{});
+
+    lb.create<miopen::ThreadwiseGemmOp>(op.getLoc(), threadA2DViewOp,
+                                        threadB2DViewOp, threadC2DViewOp);
 
     op.erase();
     return matchSuccess();
@@ -1603,4 +1626,52 @@ struct FillRewritePattern : public OpRewritePattern<miopen::FillOp> {
     return matchSuccess();
   }
 };
- 
+
+//===----------------------------------------------------------------------===//
+// threadwiseGemm lowering.
+//===----------------------------------------------------------------------===//
+
+struct ThreadwiseGemmRewritePattern
+    : public OpRewritePattern<miopen::ThreadwiseGemmOp> {
+  using OpRewritePattern<miopen::ThreadwiseGemmOp>::OpRewritePattern;
+
+  PatternMatchResult matchAndRewrite(miopen::ThreadwiseGemmOp op,
+                                     PatternRewriter &b) const override {
+    auto gemmA = op.getOperand(0);
+    auto gemmB = op.getOperand(1);
+    auto gemmC = op.getOperand(2);
+
+    ArrayRef<int64_t> gemmAShape =
+        gemmA.getType().dyn_cast<MemRefType>().getShape();
+    ArrayRef<int64_t> gemmBShape =
+        gemmB.getType().dyn_cast<MemRefType>().getShape();
+
+    auto loopK = b.create<AffineForOp>(op.getLoc(), 0, gemmAShape[0], 1);
+    auto lbK = loopK.getBodyBuilder();
+    auto loopM = lbK.create<AffineForOp>(op.getLoc(), 0, gemmAShape[1], 1);
+    auto lbM = loopM.getBodyBuilder();
+    auto loopN = lbM.create<AffineForOp>(op.getLoc(), 0, gemmBShape[1], 1);
+    auto lbN = loopN.getBodyBuilder();
+
+    SmallVector<Value, 2> memIndicesKM;
+    extractForInductionVars({loopK, loopM}, &memIndicesKM);
+    auto gemmAKM = lbN.create<AffineLoadOp>(op.getLoc(), gemmA, memIndicesKM);
+
+    SmallVector<Value, 2> memIndicesKN;
+    extractForInductionVars({loopK, loopN}, &memIndicesKN);
+    auto gemmBKN = lbN.create<AffineLoadOp>(op.getLoc(), gemmB, memIndicesKN);
+    auto mul =
+        lbN.create<MulFOp>(op.getLoc(), b.getF32Type(), gemmAKM, gemmBKN);
+
+    SmallVector<Value, 2> memIndicesMN;
+    extractForInductionVars({loopM, loopN}, &memIndicesMN);
+    auto gemmCMN = lbN.create<AffineLoadOp>(op.getLoc(), gemmC, memIndicesMN);
+
+    auto add = lbN.create<AddFOp>(op.getLoc(), b.getF32Type(), mul, gemmCMN);
+    auto store =
+        lbN.create<AffineStoreOp>(op.getLoc(), add, gemmC, memIndicesMN);
+
+    op.erase();
+    return matchSuccess();
+  }
+};
