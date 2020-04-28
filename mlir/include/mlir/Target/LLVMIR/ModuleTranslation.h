@@ -49,12 +49,12 @@ class LLVMFuncOp;
 class ModuleTranslation {
 public:
   template <typename T = ModuleTranslation>
-  static std::unique_ptr<llvm::Module> translateModule(Operation *m) {
+  static std::unique_ptr<llvm::Module> translateModule(Operation *m, StringRef triple = "", StringRef dataLayout = "") {
     if (!satisfiesLLVMModule(m))
       return nullptr;
     if (failed(checkSupportedModuleOps(m)))
       return nullptr;
-    auto llvmModule = prepareLLVMModule(m);
+    auto llvmModule = prepareLLVMModule(m, triple, dataLayout);
     if (!llvmModule)
       return nullptr;
 
@@ -85,7 +85,7 @@ protected:
                                          llvm::IRBuilder<> &builder);
   virtual LogicalResult convertOmpOperation(Operation &op,
                                             llvm::IRBuilder<> &builder);
-  static std::unique_ptr<llvm::Module> prepareLLVMModule(Operation *m);
+  static std::unique_ptr<llvm::Module> prepareLLVMModule(Operation *m, StringRef triple = "", StringRef dayaLayout = "");
 
   /// A helper to look up remapped operands in the value remapping table.
   SmallVector<llvm::Value *, 8> lookupValues(ValueRange values);
