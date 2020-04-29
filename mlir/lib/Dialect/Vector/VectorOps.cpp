@@ -1463,7 +1463,8 @@ static LogicalResult verify(ShapeCastOp op) {
 //===----------------------------------------------------------------------===//
 
 static MemRefType inferVectorTypeCastResultType(MemRefType t) {
-  return MemRefType::get({}, VectorType::get(t.getShape(), t.getElementType()));
+  return MemRefType::get({}, VectorType::get(t.getShape(), t.getElementType()),
+                         {}, t.getMemorySpace());
 }
 
 void TypeCastOp::build(OpBuilder &builder, OperationState &result,
