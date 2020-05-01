@@ -752,6 +752,15 @@ void replaceTransferOp(ConversionPatternRewriter &rewriter,
                        Operation *op, ArrayRef<Value> operands, Value dataPtr,
                        Value mask);
 
+static std::pair<LLVM::LLVMType, unsigned>
+getLLVMTypeAndAlignment(LLVMTypeConverter &typeConverter, Type type) {
+  auto toLLVMTy = [&](Type t) { return typeConverter.convertType(t); };
+  auto llvmType = toLLVMTy(type).template cast<LLVM::LLVMType>();
+  auto dataLayout = typeConverter.getDialect()->getLLVMModule().getDataLayout();
+  auto align = dataLayout.getPrefTypeAlignment(llvmType.getUnderlyingType());
+  return std::make_pair(llvmType, align);
+}
+
 template <>
 void replaceTransferOp<TransferReadOp>(ConversionPatternRewriter &rewriter,
                                        LLVMTypeConverter &typeConverter,
@@ -764,10 +773,13 @@ void replaceTransferOp<TransferReadOp>(ConversionPatternRewriter &rewriter,
   Value fill = rewriter.create<SplatOp>(loc, fillType, xferOp.padding());
   fill = rewriter.create<LLVM::DialectCastOp>(loc, toLLVMTy(fillType), fill);
 
-  auto vecTy = toLLVMTy(xferOp.getVectorType()).template cast<LLVM::LLVMType>();
+  LLVM::LLVMType vecTy;
+  unsigned align;
+  std::tie(vecTy, align) =
+      getLLVMTypeAndAlignment(typeConverter, xferOp.getVectorType());
   rewriter.replaceOpWithNewOp<LLVM::MaskedLoadOp>(
       op, vecTy, dataPtr, mask, ValueRange{fill},
-      rewriter.getI32IntegerAttr(1));
+      rewriter.getI32IntegerAttr(align));
 }
 
 template <>
@@ -777,8 +789,14 @@ void replaceTransferOp<TransferWriteOp>(ConversionPatternRewriter &rewriter,
                                         ArrayRef<Value> operands, Value dataPtr,
                                         Value mask) {
   auto adaptor = TransferWriteOpOperandAdaptor(operands);
+
+  auto xferOp = cast<TransferWriteOp>(op);
+  LLVM::LLVMType vecTy;
+  unsigned align;
+  std::tie(vecTy, align) =
+      getLLVMTypeAndAlignment(typeConverter, xferOp.getVectorType());
   rewriter.replaceOpWithNewOp<LLVM::MaskedStoreOp>(
-      op, adaptor.vector(), dataPtr, mask, rewriter.getI32IntegerAttr(1));
+      op, adaptor.vector(), dataPtr, mask, rewriter.getI32IntegerAttr(align));
 }
 
 static TransferReadOpOperandAdaptor
