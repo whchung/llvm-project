@@ -23,6 +23,7 @@ void registerToSPIRVTranslation();
 void registerToNVVMIRTranslation();
 void registerToROCLDIRTranslation();
 void registerAVX512ToLLVMIRTranslation();
+void registerToMIOpenCPPTranslation();
 
 // This function should be called before creating any MLIRContext if one
 // expects all the possible translations to be made available to the context
@@ -36,6 +37,7 @@ inline void registerAllTranslations() {
     registerToNVVMIRTranslation();
     registerToROCLDIRTranslation();
     registerAVX512ToLLVMIRTranslation();
+    registerToMIOpenCPPTranslation();
     return true;
   }();
   (void)init_once;

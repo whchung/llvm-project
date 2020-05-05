@@ -24,6 +24,7 @@
 #include "mlir/Conversion/LinalgToSPIRV/LinalgToSPIRVPass.h"
 #include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
 #include "mlir/Conversion/LoopsToGPU/LoopsToGPUPass.h"
+#include "mlir/Conversion/MIOpenToGPU/MIOpenToGPU.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Conversion/StandardToSPIRV/ConvertStandardToSPIRVPass.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVM.h"
@@ -32,6 +33,7 @@
 #include "mlir/Dialect/LLVMIR/Transforms/LegalizeForExport.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/LoopOps/Passes.h"
+#include "mlir/Dialect/MIOpen/Passes.h"
 #include "mlir/Dialect/Quant/Passes.h"
 #include "mlir/Dialect/SPIRV/Passes.h"
 #include "mlir/Transforms/LocationSnapshot.h"
@@ -86,6 +88,10 @@ inline void registerAllPasses() {
   // SPIR-V
 #define GEN_PASS_REGISTRATION
 #include "mlir/Dialect/SPIRV/Passes.h.inc"
+
+  // MIOpen
+#define GEN_PASS_REGISTRATION
+#include "mlir/Dialect/MIOpen/Passes.h.inc"
 }
 
 } // namespace mlir

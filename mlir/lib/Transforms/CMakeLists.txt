@@ -34,6 +34,7 @@ target_link_libraries(MLIRTransforms
   MLIRAnalysis
   MLIRLoopLikeInterface
   MLIRLoopOps
+  MLIRMIOpenOps
   MLIRPass
   MLIRTransformUtils
   MLIRVector

@@ -79,3 +79,5 @@ target_link_libraries(MLIRTargetROCDLIR
   MLIRROCDLIR
   MLIRTargetLLVMIRModuleTranslation
   )
+
+add_subdirectory(CppOutput)

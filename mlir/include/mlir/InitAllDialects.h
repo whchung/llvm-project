@@ -23,6 +23,7 @@
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
+#include "mlir/Dialect/MIOpen/MIOpenOps.h"
 #include "mlir/Dialect/OpenMP/OpenMPDialect.h"
 #include "mlir/Dialect/Quant/QuantOps.h"
 #include "mlir/Dialect/SDBM/SDBMDialect.h"
@@ -54,6 +55,7 @@ inline void registerAllDialects() {
     registerDialect<ROCDL::ROCDLDialect>();
     registerDialect<SDBMDialect>();
     registerDialect<shape::ShapeDialect>();
+    registerDialect<miopen::MIOpenDialect>();
     return true;
   }();
   (void)init_once;
