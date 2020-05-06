@@ -457,22 +457,50 @@ static LogicalResult verify(LaunchFuncOp op) {
 // GPUFuncOp
 //===----------------------------------------------------------------------===//
 
-/// Adds a workgroup attribution to "op" of the MemRef type with the given shape
-/// and element type.
-Value GPUFuncOp::addWorkgroupAttribution(ArrayRef<int64_t> shape,
-                                         Type elementType) {
-  unsigned pos = getNumFuncArguments() + getNumWorkgroupAttributions();
-  Block &bodyBlock = body().front();
-  Value attribution = bodyBlock.insertArgument(
-      std::next(bodyBlock.args_begin(), pos),
-      MemRefType::get(shape, elementType, /*affineMapComposition=*/{},
-                      GPUDialect::getWorkgroupAddressSpace()));
-  auto numWorkgroupBuffersAttr =
-      getAttrOfType<IntegerAttr>(getNumWorkgroupAttributionsAttrName());
-  setAttr(getNumWorkgroupAttributionsAttrName(),
-          IntegerAttr::get(numWorkgroupBuffersAttr.getType(),
-                           numWorkgroupBuffersAttr.getValue() + 1));
-  return attribution;
+/// Returns a list of block arguments that correspond to buffers located in
+/// the workgroup memory
+ArrayRef<BlockArgument> GPUFuncOp::getWorkgroupAttributions() {
+  auto begin =
+      std::next(getBody().front().args_begin(), getType().getNumInputs());
+  auto end = std::next(begin, getNumWorkgroupAttributions());
+  return {begin, end};
+}
+
+/// Returns a list of block arguments that correspond to buffers located in
+/// the private memory.
+ArrayRef<BlockArgument> GPUFuncOp::getPrivateAttributions() {
+  // Buffers on the private memory always come after buffers on the workgroup
+  // memory.
+  auto begin =
+      std::next(getBody().front().args_begin(),
+                getType().getNumInputs() + getNumWorkgroupAttributions());
+  auto end = std::next(begin, getNumPrivateAttributions());
+  return {begin, end};
+}
+
+/// Adds a new block argument that corresponds to buffers located in
+/// workgroup memory.
+BlockArgument GPUFuncOp::addWorkgroupAttribution(Type type) {
+  auto attrName = getNumWorkgroupAttributionsAttrName();
+  auto attr = getAttrOfType<IntegerAttr>(attrName);
+  setAttr(attrName, IntegerAttr::get(attr.getType(), attr.getValue() + 1));
+  return getBody().front().insertArgument(
+      getType().getNumInputs() + attr.getInt(), type);
+}
+
+/// Adds a new block argument that corresponds to buffers located in
+/// private memory.
+BlockArgument GPUFuncOp::addPrivateAttribution(Type type) {
+  auto attrName = getNumPrivateAttributionsAttrName();
+  auto attr = getAttrOfType<IntegerAttr>(attrName);
+  setAttr(attrName, IntegerAttr::get(attr.getType(), attr.getValue() + 1));
+
+  // Buffers on the private memory always come after buffers on the workgroup
+  // memory.
+  auto workgroupAttrCount = getNumWorkgroupAttributions();
+
+  return getBody().front().insertArgument(
+      getType().getNumInputs() + workgroupAttrCount + attr.getInt(), type);
 }
 
 void GPUFuncOp::build(OpBuilder &builder, OperationState &result,
@@ -485,6 +513,8 @@ void GPUFuncOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute(getNumWorkgroupAttributionsAttrName(),
                       builder.getI64IntegerAttr(workgroupAttributions.size()));
+  result.addAttribute(getNumPrivateAttributionsAttrName(),
+                      builder.getI64IntegerAttr(privateAttributions.size()));
   result.addAttributes(attrs);
   Region *body = result.addRegion();
   Block *entryBlock = new Block;
@@ -582,6 +612,13 @@ static ParseResult parseGPUFuncOp(OpAsmParser &parser, OperationState &result) {
                                entryArgs, argTypes)))
     return failure();
 
+  // Store the number of operands we just parsed as the number of private
+  // memory attributions.
+  unsigned numPrivateAttrs =
+      argTypes.size() - type.getNumInputs() - numWorkgroupAttrs;
+  result.addAttribute(GPUFuncOp::getNumPrivateAttributionsAttrName(),
+                      builder.getI64IntegerAttr(numPrivateAttrs));
+
   // Parse the kernel attribute if present.
   if (succeeded(parser.parseOptionalKeyword(GPUFuncOp::getKernelKeyword())))
     result.addAttribute(GPUDialect::getKernelFuncAttrName(),
@@ -626,6 +663,7 @@ static void printGPUFuncOp(OpAsmPrinter &p, GPUFuncOp op) {
   impl::printFunctionAttributes(p, op.getOperation(), type.getNumInputs(),
                                 type.getNumResults(),
                                 {op.getNumWorkgroupAttributionsAttrName(),
+                                 op.getNumPrivateAttributionsAttrName(),
                                  GPUDialect::getKernelFuncAttrName()});
   p.printRegion(op.getBody(), /*printEntryBlockArgs=*/false);
 }
@@ -675,10 +713,13 @@ static LogicalResult verifyAttributions(Operation *op,
 LogicalResult GPUFuncOp::verifyBody() {
   unsigned numFuncArguments = getNumArguments();
   unsigned numWorkgroupAttributions = getNumWorkgroupAttributions();
+  unsigned numPrivateAttributions = getNumPrivateAttributions();
   unsigned numBlockArguments = front().getNumArguments();
-  if (numBlockArguments < numFuncArguments + numWorkgroupAttributions)
+  if (numBlockArguments <
+      numFuncArguments + numWorkgroupAttributions + numPrivateAttributions)
     return emitOpError() << "expected at least "
-                         << numFuncArguments + numWorkgroupAttributions
+                         << numFuncArguments + numWorkgroupAttributions +
+                                numPrivateAttributions
                          << " arguments to body region";
 
   ArrayRef<Type> funcArgTypes = getType().getInputs();
