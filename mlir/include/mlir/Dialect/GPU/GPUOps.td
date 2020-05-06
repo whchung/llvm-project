@@ -161,10 +161,6 @@ def GPU_GPUFuncOp : GPU_Op<"func", [HasParent<"GPUModuleOp">,
   ];
 
   let extraClassDeclaration = [{
-    /// Adds a workgroup attribution of the MemRef type with the given shape and
-    /// element type.
-    Value addWorkgroupAttribution(ArrayRef<int64_t> shape, Type elementType);
-
     /// Returns `true` if the GPU function defined by this Op is a kernel, i.e.
     /// it is intended to be launched from host.
     bool isKernel() {
@@ -189,38 +185,38 @@ def GPU_GPUFuncOp : GPU_Op<"func", [HasParent<"GPUModuleOp">,
           .getInt();
     }
 
-    /// Returns a list of block arguments that correspond to buffers located in
-    /// the workgroup memory
-    ArrayRef<BlockArgument> getWorkgroupAttributions() {
-      auto begin =
-          std::next(getBody().front().args_begin(), getType().getNumInputs());
-      auto end = std::next(begin, getNumWorkgroupAttributions());
-      return {begin, end};
+    /// Returns the number of buffers located in the private memory.
+    unsigned getNumPrivateAttributions() {
+      return getAttrOfType<IntegerAttr>(getNumPrivateAttributionsAttrName())
+          .getInt();
     }
 
-    // Adds a new block argument that corresponds to buffers located in
-    // workgroup memory.
-    BlockArgument addWorkgroupAttribution(Type type) {
-      auto attrName = getNumWorkgroupAttributionsAttrName();
-      auto attr = getAttrOfType<IntegerAttr>(attrName);
-      setAttr(attrName, IntegerAttr::get(attr.getType(), attr.getValue() + 1));
-      return getBody().front().insertArgument(
-          getType().getNumInputs() + attr.getInt(), type);
-    }
+    /// Returns a list of block arguments that correspond to buffers located in
+    /// the workgroup memory
+    ArrayRef<BlockArgument> getWorkgroupAttributions();
+
+    /// Adds a new block argument that corresponds to buffers located in
+    /// workgroup memory.
+    BlockArgument addWorkgroupAttribution(Type type);
 
     /// Returns a list of block arguments that correspond to buffers located in
     /// the private memory.
-    ArrayRef<BlockArgument> getPrivateAttributions() {
-      auto begin =
-          std::next(getBody().front().args_begin(),
-                    getType().getNumInputs() + getNumWorkgroupAttributions());
-      return {begin, getBody().front().args_end()};
-    }
+    ArrayRef<BlockArgument> getPrivateAttributions();
+
+    /// Adds a new block argument that corresponds to buffers located in
+    /// private memory.
+    BlockArgument addPrivateAttribution(Type type);
 
     /// Returns the name of the attribute containing the number of buffers
     /// located in the workgroup memory.
     static StringRef getNumWorkgroupAttributionsAttrName() {
       return "workgroup_attributions";
+    }
+
+    /// Returns the name of the attribute containing the number of buffers
+    /// located in the private memory.
+    static StringRef getNumPrivateAttributionsAttrName() {
+      return "private_attributions";
     }
 
     // FunctionLike trait needs access to the functions below.
