@@ -503,29 +503,6 @@ BlockArgument GPUFuncOp::addPrivateAttribution(Type type) {
       getType().getNumInputs() + workgroupAttrCount + attr.getInt(), type);
 }
 
-/// Adds a workgroup attribution to "op" of the MemRef type with the given shape
-/// and element type.
-Value GPUFuncOp::addWorkgroupAttribution(ArrayRef<int64_t> shape,
-                                         Type elementType) {
-  return addAttribution(*this, shape, elementType,
-                        getNumFuncArguments() + getNumWorkgroupAttributions(),
-                        GPUDialect::getWorkgroupAddressSpace(),
-                        getNumWorkgroupAttributionsAttrName());
-}
-
-/// Adds a private attribution to "op" of the MemRef type with the given shape
-/// and element type.
-///
-/// Note private attributions are always after workgroup attributions.
-Value GPUFuncOp::addPrivateAttribution(ArrayRef<int64_t> shape,
-                                       Type elementType) {
-  return addAttribution(*this, shape, elementType,
-                        getNumFuncArguments() + getNumWorkgroupAttributions() +
-                            getNumPrivateAttributions(),
-                        GPUDialect::getPrivateAddressSpace(),
-                        getNumPrivateAttributionsAttrName());
-}
-
 void GPUFuncOp::build(OpBuilder &builder, OperationState &result,
                       StringRef name, FunctionType type,
                       ArrayRef<Type> workgroupAttributions,
