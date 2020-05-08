@@ -23,6 +23,8 @@
 #include "PassDetail.h"
 #include "mlir/Dialect/MIOpen/LowerMIOpenOps.h"
 
+#include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/LoopToStandard/ConvertLoopToStandard.h"
 #include "mlir/Dialect/MIOpen/MIOpenOps.h"
 #include "mlir/Dialect/MIOpen/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -81,6 +83,8 @@ void LowerMIOpenOpsStep3Pass::runOnOperation() {
   patterns.insert<BlockwiseGemmRewritePattern>(&getContext());
   patterns.insert<BlockwiseCopyRewritePattern>(&getContext());
   patterns.insert<ThreadwiseGemmRewritePattern>(&getContext());
+  populateAffineToStdConversionPatterns(patterns, &getContext());
+  populateLoopToStdConversionPatterns(patterns, &getContext());
   applyPatternsAndFoldGreedily(getOperation(), patterns);
 }
 
