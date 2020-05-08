@@ -10,12 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/Dialect/MIOpen/MIOpenOps.h"
 #include "mlir/Dialect/MIOpen/Passes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/AffineMap.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
@@ -1501,13 +1502,8 @@ struct BlockwiseGemmRewritePattern : public OpRewritePattern<miopen::BlockwiseGe
         op.getLoc(), op.getOperand(1), threadBAllocOp,
         matrixBThreadwiseCopySourceAndDestCoords);
 
-    // Emit threadwise GEMM.
-    // TBD add attributes.
-    // constexpr auto threadwise_gemm =
-    //     ThreadwiseGemmTransANormalBNormalC<decltype(a_thread_mtx),
-    //                                        decltype(b_thread_mtx),
-    //                                        decltype(c_thread_mtx)>{};
-    lb.create<miopen::ThreadwiseGemmOp>(op.getLoc(), threadAAllocOp, threadBAllocOp, op.getOperand(2));
+    lb.create<miopen::ThreadwiseGemmOp>(op.getLoc(), threadAAllocOp,
+                                        threadBAllocOp, op.getOperand(2));
 
     op.erase();
     return success();
@@ -1803,6 +1799,58 @@ struct MovePosRewritePattern : public OpRewritePattern<miopen::MovePosOp> {
       // store
       auto store = b.create<StoreOp>(loc, add, op.memref(), ValueRange{iter});
     }
+    op.erase();
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// threadwiseGemm lowering.
+//===----------------------------------------------------------------------===//
+
+struct ThreadwiseGemmRewritePattern
+    : public OpRewritePattern<miopen::ThreadwiseGemmOp> {
+  using OpRewritePattern<miopen::ThreadwiseGemmOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(miopen::ThreadwiseGemmOp op,
+                                PatternRewriter &b) const override {
+    auto gemmA = op.getOperand(0);
+    auto gemmB = op.getOperand(1);
+    auto gemmC = op.getOperand(2);
+
+    ArrayRef<int64_t> gemmAShape =
+        gemmA.getType().dyn_cast<MemRefType>().getShape();
+    ArrayRef<int64_t> gemmBShape =
+        gemmB.getType().dyn_cast<MemRefType>().getShape();
+
+    auto loopK = b.create<AffineForOp>(op.getLoc(), 0, gemmAShape[0], 1);
+    auto lbK = loopK.getBody();
+    b.setInsertionPointToStart(lbK);
+
+    auto loopM = b.create<AffineForOp>(loopK.getLoc(), 0, gemmAShape[1], 1);
+    auto lbM = loopM.getBody();
+    b.setInsertionPointToStart(lbM);
+
+    auto loopN = b.create<AffineForOp>(op.getLoc(), 0, gemmBShape[1], 1);
+    auto lbN = loopN.getBody();
+    b.setInsertionPointToStart(lbN);
+
+    SmallVector<Value, 2> memIndicesKM;
+    extractForInductionVars({loopK, loopM}, &memIndicesKM);
+    auto gemmAKM = b.create<AffineLoadOp>(op.getLoc(), gemmA, memIndicesKM);
+
+    SmallVector<Value, 2> memIndicesKN;
+    extractForInductionVars({loopK, loopN}, &memIndicesKN);
+    auto gemmBKN = b.create<AffineLoadOp>(op.getLoc(), gemmB, memIndicesKN);
+    auto mul = b.create<MulFOp>(op.getLoc(), b.getF32Type(), gemmAKM, gemmBKN);
+
+    SmallVector<Value, 2> memIndicesMN;
+    extractForInductionVars({loopM, loopN}, &memIndicesMN);
+    auto gemmCMN = b.create<AffineLoadOp>(op.getLoc(), gemmC, memIndicesMN);
+
+    auto add = b.create<AddFOp>(op.getLoc(), b.getF32Type(), mul, gemmCMN);
+    auto store = b.create<AffineStoreOp>(op.getLoc(), add, gemmC, memIndicesMN);
+
     op.erase();
     return success();
   }
