@@ -5,6 +5,7 @@ add_mlir_library(MLIRTestTransforms
   TestCallGraph.cpp
   TestConstantFold.cpp
   TestConvertGPUKernelToCubin.cpp
+  TestConvertGPUKernelToHsaco.cpp
   TestDominance.cpp
   TestLoopFusion.cpp
   TestGpuMemoryPromotion.cpp
@@ -37,6 +38,7 @@ add_mlir_library(MLIRTestTransforms
   MLIREDSC
   MLIRGPU
   MLIRGPUtoCUDATransforms
+  MLIRGPUtoROCmTransforms
   MLIRLinalgOps
   MLIRLinalgTransforms
   MLIRSCF
