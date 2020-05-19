@@ -151,8 +151,7 @@ private:
 
   /// Adds type to funcOp's workgroup attributions.
   Value createWorkgroupBuffer() {
-    int workgroupMemoryAddressSpace =
-        gpu::GPUDialect::getWorkgroupAddressSpace();
+    int workgroupMemoryAddressSpace = 3;
     auto bufferType =
         MemRefType::get({kSubgroupSize}, valueType, ArrayRef<AffineMap>{},
                         workgroupMemoryAddressSpace);

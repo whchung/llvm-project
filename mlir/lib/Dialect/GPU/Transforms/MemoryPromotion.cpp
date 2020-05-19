@@ -160,12 +160,8 @@ void mlir::promoteToWorkgroupMemory(GPUFuncOp op, unsigned arg) {
   auto type = value.getType().dyn_cast<MemRefType>();
   assert(type && type.hasStaticShape() && "can only promote memrefs");
 
-  // Get the type of the buffer in the workgroup memory.
-  int workgroupMemoryAddressSpace = gpu::GPUDialect::getWorkgroupAddressSpace();
-  auto bufferType = MemRefType::get(type.getShape(), type.getElementType(), {},
-                                    workgroupMemoryAddressSpace);
-
-  Value attribution = op.addWorkgroupAttribution(bufferType);
+  Value attribution =
+      op.addWorkgroupAttribution(type.getShape(), type.getElementType());
 
   // Replace the uses first since only the original uses are currently present.
   // Then insert the copies.
