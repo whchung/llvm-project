@@ -20,12 +20,13 @@ static OwnedHsaco compileROCDLToHsacoForTesting(const std::string &, Location,
 
 namespace mlir {
 void registerTestConvertGPUKernelToHsacoPass() {
-  PassPipelineRegistration<>("test-kernel-to-hsaco",
-                             "Convert all kernel functions to ROCm HSACO blobs",
-                             [](OpPassManager &pm) {
-                               pm.addPass(createConvertGPUKernelToHsacoPass(
-                                   compileROCDLToHsacoForTesting));
-                             });
+  PassPipelineRegistration<>(
+      "test-kernel-to-hsaco",
+      "Convert all kernel functions to ROCm HSACO blobs",
+      [](OpPassManager &pm) {
+        pm.addPass(createConvertGPUKernelToHsacoPass(
+            compileROCDLToHsacoForTesting, "amdgcn-amd-amdhsa", "gfx900", ""));
+      });
 }
 } // namespace mlir
 #endif

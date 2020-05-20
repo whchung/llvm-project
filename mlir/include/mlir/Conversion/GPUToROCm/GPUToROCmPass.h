@@ -45,7 +45,9 @@ using HsacoGenerator =
 /// After the transformation, the body of the kernel function is removed (i.e.,
 /// it is turned into a declaration).
 std::unique_ptr<OperationPass<gpu::GPUModuleOp>>
-createConvertGPUKernelToHsacoPass(HsacoGenerator hsacoGenerator);
+createConvertGPUKernelToHsacoPass(HsacoGenerator hsacoGenerator,
+                                  StringRef triple, StringRef targetChip,
+                                  StringRef features);
 
 } // namespace mlir
 

@@ -30,6 +30,9 @@ class OperationPass;
 /// typed ABI on top of GPU runtimes such as CUDA or ROCm (HIP).
 std::unique_ptr<OperationPass<ModuleOp>>
 createConvertGpuLaunchFuncToGpuRuntimeCallsPass();
+std::unique_ptr<OperationPass<ModuleOp>>
+createConvertGpuLaunchFuncToGpuRuntimeCallsPass(
+    std::string gpuBinaryAnnotation);
 
 } // namespace mlir
 

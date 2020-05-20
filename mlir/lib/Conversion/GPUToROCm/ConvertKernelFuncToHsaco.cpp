@@ -51,8 +51,10 @@ class GpuKernelToHsacoPass
     : public PassWrapper<GpuKernelToHsacoPass,
                          OperationPass<gpu::GPUModuleOp>> {
 public:
-  GpuKernelToHsacoPass(HsacoGenerator hsacoGenerator)
-      : hsacoGenerator(hsacoGenerator) {}
+  GpuKernelToHsacoPass(HsacoGenerator hsacoGenerator, StringRef triple,
+                       StringRef targetChip, StringRef features)
+      : hsacoGenerator(hsacoGenerator), triple(triple), targetChip(targetChip),
+        features(features) {}
 
   void runOnOperation() override {
     gpu::GPUModuleOp module = getOperation();
@@ -97,6 +99,9 @@ private:
                                                  Location loc, StringRef name);
 
   HsacoGenerator hsacoGenerator;
+  llvm::Triple triple;
+  StringRef targetChip;
+  StringRef features;
 };
 
 } // anonymous namespace
@@ -128,17 +133,14 @@ OwnedHsaco GpuKernelToHsacoPass::convertModuleToHsaco(llvm::Module &llvmModule,
   std::unique_ptr<llvm::TargetMachine> targetMachine;
   {
     std::string error;
-    constexpr const char *rocmTriple = "amdgcn-amd-amdhsa";
-    llvm::Triple triple(rocmTriple);
     const llvm::Target *target =
         llvm::TargetRegistry::lookupTarget("", triple, error);
     if (target == nullptr) {
       emitError(loc, "cannot initialize target triple");
       return {};
     }
-    // TODO(whchung): be able to set target.
-    targetMachine.reset(
-        target->createTargetMachine(triple.str(), "gfx900", "", {}, {}));
+    targetMachine.reset(target->createTargetMachine(triple.str(), targetChip,
+                                                    features, {}, {}));
   }
 
   llvmModule.setDataLayout(targetMachine->createDataLayout());
@@ -157,6 +159,9 @@ StringAttr GpuKernelToHsacoPass::translateGPUModuleToHsacoAnnotation(
 }
 
 std::unique_ptr<OperationPass<gpu::GPUModuleOp>>
-mlir::createConvertGPUKernelToHsacoPass(HsacoGenerator hsacoGenerator) {
-  return std::make_unique<GpuKernelToHsacoPass>(hsacoGenerator);
+mlir::createConvertGPUKernelToHsacoPass(HsacoGenerator hsacoGenerator,
+                                        StringRef triple, StringRef targetChip,
+                                        StringRef features) {
+  return std::make_unique<GpuKernelToHsacoPass>(hsacoGenerator, triple,
+                                                targetChip, features);
 }
