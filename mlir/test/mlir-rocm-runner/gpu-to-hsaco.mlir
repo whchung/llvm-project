@@ -21,12 +21,12 @@ func @main() {
   %23 = memref_cast %22 : memref<?xf32> to memref<*xf32>
   call @print_memref_f32(%23) : (memref<*xf32>) -> ()
   %24 = constant 1.0 : f32
-  %25 = call @mgpuMemHostGetDeviceMemRef1dFloat(%22) : (memref<?xf32>) -> (memref<?xf32>)
+  %25 = call @mgpuMemGetDeviceMemRef1dFloat(%22) : (memref<?xf32>) -> (memref<?xf32>)
   call @other_func(%24, %25) : (f32, memref<?xf32>) -> ()
   call @print_memref_f32(%23) : (memref<*xf32>) -> ()
   return
 }
 
 func @mgpuMemHostRegisterFloat(%ptr : memref<*xf32>)
-func @mgpuMemHostGetDeviceMemRef1dFloat(%ptr : memref<?xf32>) -> (memref<?xf32>)
+func @mgpuMemGetDeviceMemRef1dFloat(%ptr : memref<?xf32>) -> (memref<?xf32>)
 func @print_memref_f32(%ptr : memref<*xf32>)

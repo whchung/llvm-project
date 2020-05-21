@@ -8,7 +8,7 @@ func @main() {
   %sx = dim %dst, 0 : memref<?xi32>
   %cast_dst = memref_cast %dst : memref<?xi32> to memref<*xi32>
   call @mgpuMemHostRegisterInt32(%cast_dst) : (memref<*xi32>) -> ()
-  %dst_device = call @mgpuMemHostGetDeviceMemRef1dInt32(%dst) : (memref<?xi32>) -> (memref<?xi32>)
+  %dst_device = call @mgpuMemGetDeviceMemRef1dInt32(%dst) : (memref<?xi32>) -> (memref<?xi32>)
   gpu.launch blocks(%bx, %by, %bz) in (%grid_x = %one, %grid_y = %one, %grid_z = %one)
              threads(%tx, %ty, %tz) in (%block_x = %sx, %block_y = %one, %block_z = %one) {
     %t0 = index_cast %tx : index to i32
@@ -26,5 +26,5 @@ func @main() {
 }
 
 func @mgpuMemHostRegisterInt32(%ptr : memref<*xi32>)
-func @mgpuMemHostGetDeviceMemRef1dInt32(%ptr : memref<?xi32>) -> (memref<?xi32>)
+func @mgpuMemGetDeviceMemRef1dInt32(%ptr : memref<?xi32>) -> (memref<?xi32>)
 func @print_memref_i32(%ptr : memref<*xi32>)

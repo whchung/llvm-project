@@ -119,7 +119,7 @@ extern "C" void mgpuMemHostRegisterInt32(int64_t rank, void *ptr) {
 }
 
 template <typename T>
-void mgpuMemHostGetDevicePointer(T *hostPtr, T **devicePtr) {
+void mgpuMemGetDevicePointer(T *hostPtr, T **devicePtr) {
   reportErrorIfAny(hipSetDevice(0), "hipSetDevice");
   reportErrorIfAny(
       hipHostGetDevicePointer((void **)devicePtr, hostPtr, /*flags=*/0),
@@ -127,19 +127,19 @@ void mgpuMemHostGetDevicePointer(T *hostPtr, T **devicePtr) {
 }
 
 extern "C" StridedMemRefType<float, 1>
-mgpuMemHostGetDeviceMemRef1dFloat(float *allocated, float *aligned,
+mgpuMemGetDeviceMemRef1dFloat(float *allocated, float *aligned,
                                   int64_t offset, int64_t size,
                                   int64_t stride) {
   float *devicePtr = nullptr;
-  mgpuMemHostGetDevicePointer(aligned, &devicePtr);
+  mgpuMemGetDevicePointer(aligned, &devicePtr);
   return {devicePtr, devicePtr, offset, {size}, {stride}};
 }
 
 extern "C" StridedMemRefType<int32_t, 1>
-mgpuMemHostGetDeviceMemRef1dInt32(int32_t *allocated, int32_t *aligned,
+mgpuMemGetDeviceMemRef1dInt32(int32_t *allocated, int32_t *aligned,
                                   int64_t offset, int64_t size,
                                   int64_t stride) {
   int32_t *devicePtr = nullptr;
-  mgpuMemHostGetDevicePointer(aligned, &devicePtr);
+  mgpuMemGetDevicePointer(aligned, &devicePtr);
   return {devicePtr, devicePtr, offset, {size}, {stride}};
 }
