@@ -15,6 +15,7 @@
 #include <cassert>
 #include <numeric>
 
+#include "mlir/ExecutionEngine/CRunnerUtils.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -81,16 +82,6 @@ extern "C" void mgpuMemHostRegister(void *ptr, uint64_t sizeBytes) {
                    "MemHostRegister");
 }
 
-// A struct that corresponds to how MLIR represents memrefs.
-template <typename T, int N>
-struct MemRefType {
-  T *basePtr;
-  T *data;
-  int64_t offset;
-  int64_t sizes[N];
-  int64_t strides[N];
-};
-
 // Allows to register a MemRef with the ROCM runtime. Initializes array with
 // value. Helpful until we have transfer functions implemented.
 template <typename T>
@@ -113,17 +104,18 @@ void mgpuMemHostRegisterMemRef(T *pointer, llvm::ArrayRef<int64_t> sizes,
   mgpuMemHostRegister(pointer, count * sizeof(T));
 }
 
-extern "C" void mgpuMemHostRegisterMemRef1dFloat(float *allocated,
-                                                 float *aligned, int64_t offset,
-                                                 int64_t size, int64_t stride) {
-  mgpuMemHostRegisterMemRef(aligned + offset, {size}, {stride}, 1.23f);
+extern "C" void mgpuMemHostRegisterFloat(int64_t rank, void *ptr) {
+  auto *desc = static_cast<StridedMemRefType<float, 1> *>(ptr);
+  auto sizes = llvm::ArrayRef<int64_t>(desc->sizes, rank);
+  auto strides = llvm::ArrayRef<int64_t>(desc->sizes + rank, rank);
+  mgpuMemHostRegisterMemRef(desc->data + desc->offset, sizes, strides, 1.23f);
 }
 
-extern "C" void mgpuMemHostRegisterMemRef1dInt32(int32_t *allocated,
-                                                 int32_t *aligned,
-                                                 int64_t offset, int64_t size,
-                                                 int64_t stride) {
-  mgpuMemHostRegisterMemRef(aligned + offset, {size}, {stride}, 123);
+extern "C" void mgpuMemHostRegisterInt32(int64_t rank, void *ptr) {
+  auto *desc = static_cast<StridedMemRefType<int32_t, 1> *>(ptr);
+  auto sizes = llvm::ArrayRef<int64_t>(desc->sizes, rank);
+  auto strides = llvm::ArrayRef<int64_t>(desc->sizes + rank, rank);
+  mgpuMemHostRegisterMemRef(desc->data + desc->offset, sizes, strides, 123);
 }
 
 template <typename T>
@@ -134,7 +126,7 @@ void mgpuMemHostGetDevicePointer(T *hostPtr, T **devicePtr) {
       "hipHostGetDevicePointer");
 }
 
-extern "C" MemRefType<float, 1>
+extern "C" StridedMemRefType<float, 1>
 mgpuMemHostGetDeviceMemRef1dFloat(float *allocated, float *aligned,
                                   int64_t offset, int64_t size,
                                   int64_t stride) {
@@ -143,7 +135,7 @@ mgpuMemHostGetDeviceMemRef1dFloat(float *allocated, float *aligned,
   return {devicePtr, devicePtr, offset, {size}, {stride}};
 }
 
-extern "C" MemRefType<int32_t, 1>
+extern "C" StridedMemRefType<int32_t, 1>
 mgpuMemHostGetDeviceMemRef1dInt32(int32_t *allocated, int32_t *aligned,
                                   int64_t offset, int64_t size,
                                   int64_t stride) {
