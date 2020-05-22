@@ -68,8 +68,10 @@ if(MLIR_ROCM_RUNNER_ENABLED)
     MLIRExecutionEngine
     MLIRIR
     MLIRParser
+    MLIRROCDLIR
     MLIRSupport
     MLIRTargetLLVMIR
+    MLIRTargetROCDLIR
     MLIRTransforms
     MLIRTranslation
     ${ROCM_RUNTIME_LIBRARY}

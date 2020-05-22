@@ -31,6 +31,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Target/ROCDLIR.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/InitLLVM.h"
@@ -60,7 +61,7 @@
 using namespace mlir;
 using namespace llvm;
 
-using BinaryBlob = SmallVector<char, 0>;
+using Blob = SmallVector<char, 0>;
 
 static cl::opt<std::string> TripleName("triple", cl::desc("target triple"),
                                        cl::value_desc("triple string"),
@@ -75,7 +76,7 @@ static cl::opt<std::string> Features("feature", cl::desc("target features"),
                                      cl::init("-code-object-v3"));
 
 static LogicalResult assembleIsa(const std::string isa, StringRef name,
-                                 BinaryBlob &result) {
+                                 Blob &result) {
   raw_svector_ostream OS(result);
   std::unique_ptr<buffer_ostream> BOS = std::make_unique<buffer_ostream>(OS);
 
@@ -135,8 +136,8 @@ static LogicalResult assembleIsa(const std::string isa, StringRef name,
   return success();
 }
 
-static LogicalResult createHsaco(BinaryBlob &isaBlob, StringRef name,
-                                 BinaryBlob &hsacoBlob) {
+static LogicalResult createHsaco(Blob &isaBlob, StringRef name,
+                                 Blob &hsacoBlob) {
   // Save the ISA binary to a temp file.
   int TempISABinaryFD = -1;
   SmallString<128> TempISABinaryFilename;
@@ -196,12 +197,32 @@ static LogicalResult createHsaco(BinaryBlob &isaBlob, StringRef name,
   return success();
 }
 
-OwnedHsaco compileLLVMIRToHsaco(const std::string isa, Location loc,
-                                StringRef name) {
+static LogicalResult initAMDGPUBackend() {
+  // Make sure the AMDGPU target is initialized.
+  LLVMInitializeAMDGPUTarget();
+  LLVMInitializeAMDGPUTargetInfo();
+  LLVMInitializeAMDGPUTargetMC();
+  LLVMInitializeAMDGPUAsmPrinter();
+  return success();
+}
+
+static LogicalResult
+compileModuleToROCDLIR(Operation *m,
+                       std::unique_ptr<llvm::Module> &llvmModule) {
+  llvmModule = translateModuleToROCDLIR(m);
+  // TODO(whchung): Link with ROCm-Device-Libs in case needed (ex: the Module
+  // depends on math functions).
+  if (llvmModule)
+    return success();
+  return failure();
+}
+
+static OwnedBlob compileISAToHsaco(const std::string isa, Location loc,
+                                   StringRef name) {
   // ISA -> ISA in binary form via MC.
   // Use lld to create HSA code object.
-  BinaryBlob IsaBlob;
-  BinaryBlob HsacoBlob;
+  Blob IsaBlob;
+  Blob HsacoBlob;
 
   if (succeeded(assembleIsa(isa, name, IsaBlob)) &&
       succeeded(createHsaco(IsaBlob, name, HsacoBlob)))
@@ -220,8 +241,9 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   auto &kernelPm = pm.nest<gpu::GPUModuleOp>();
   kernelPm.addPass(createStripDebugInfoPass());
   kernelPm.addPass(createLowerGpuOpsToROCDLOpsPass());
-  kernelPm.addPass(createConvertGPUKernelToHsacoPass(
-      &compileLLVMIRToHsaco, TripleName, TargetChip, Features));
+  kernelPm.addPass(createConvertGPUKernelToBlobPass(
+      &initAMDGPUBackend, &compileModuleToROCDLIR, &compileISAToHsaco,
+      TripleName, TargetChip, Features, /*gpuBinaryAnnotation=*/"rocdl.hsaco"));
   pm.addPass(createLowerToLLVMPass());
   pm.addPass(createConvertGpuLaunchFuncToGpuRuntimeCallsPass(
       /*gpuBinaryAnnotation=*/"rocdl.hsaco"));

@@ -23,7 +23,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LogicalResult.h"
-#include "mlir/Target/ROCDLIR.h"
 
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/Twine.h"
@@ -39,22 +38,25 @@
 using namespace mlir;
 
 namespace {
-static constexpr const char *kHsacoAnnotation = "rocdl.hsaco";
 
-/// A pass converting tagged kernel modules to hsaco blobs.
+/// A pass converting tagged kernel modules to a blob with target instructions.
 ///
-/// If tagged as a kernel module, each contained function is translated to ROCDL
-/// IR. A user provided HsacoGenerator compiles the IR to GPU binary code in HSA
-/// code object format, which is then attached as an attribute to the function.
+/// If tagged as a kernel module, each contained function is translated to
+/// user-specified IR. A user provided BlobGenerator then compiles the IR to
+/// GPU binary code, which is then attached as an attribute to the function.
 /// The function body is erased.
-class GpuKernelToHsacoPass
-    : public PassWrapper<GpuKernelToHsacoPass,
-                         OperationPass<gpu::GPUModuleOp>> {
+class GpuKernelToBlobPass
+    : public PassWrapper<GpuKernelToBlobPass, OperationPass<gpu::GPUModuleOp>> {
 public:
-  GpuKernelToHsacoPass(HsacoGenerator hsacoGenerator, StringRef triple,
-                       StringRef targetChip, StringRef features)
-      : hsacoGenerator(hsacoGenerator), triple(triple), targetChip(targetChip),
-        features(features) {}
+  GpuKernelToBlobPass(InitBackendCallback initBackendCallback,
+                      LoweringCallback loweringCallback,
+                      BlobGenerator blobGenerator, StringRef triple,
+                      StringRef targetChip, StringRef features,
+                      StringRef gpuBinaryAnnotation)
+      : initBackendCallback(initBackendCallback),
+        loweringCallback(loweringCallback), blobGenerator(blobGenerator),
+        triple(triple), targetChip(targetChip), features(features),
+        blobAnnotation(gpuBinaryAnnotation) {}
 
   void runOnOperation() override {
     gpu::GPUModuleOp module = getOperation();
@@ -65,21 +67,20 @@ public:
             ->getRegisteredDialect<LLVM::LLVMDialect>()
             ->getLLVMContextMutex());
 
-    // Make sure the AMDGPU target is initialized.
-    LLVMInitializeAMDGPUTarget();
-    LLVMInitializeAMDGPUTargetInfo();
-    LLVMInitializeAMDGPUTargetMC();
-    LLVMInitializeAMDGPUAsmPrinter();
-
-    auto llvmModule = translateModuleToROCDLIR(module);
-    if (!llvmModule)
+    // Initialize LLVM backend.
+    if (!succeeded(initBackendCallback()))
       return signalPassFailure();
 
-    // Translate the module to HSA code object and attach the result as
+    // Lower the module to a llvm module.
+    std::unique_ptr<llvm::Module> llvmModule = nullptr;
+    if (!succeeded(loweringCallback(module, llvmModule)))
+      return signalPassFailure();
+
+    // Translate the llvm module to a target blob and attach the result as
     // attribute to the module.
-    if (auto hsacoAttr = translateGPUModuleToHsacoAnnotation(
+    if (auto blobAttr = translateGPUModuleToBinaryAnnotation(
             *llvmModule, module.getLoc(), module.getName()))
-      module.setAttr(kHsacoAnnotation, hsacoAttr);
+      module.setAttr(blobAnnotation, blobAttr);
     else
       signalPassFailure();
   }
@@ -88,27 +89,31 @@ private:
   std::string translateModuleToISA(llvm::Module &module,
                                    llvm::TargetMachine &targetMachine);
 
-  /// Converts llvmModule to hsaco using the user-provided generator. Location
-  /// is used for error reporting and name is forwarded to the HSACO generator
-  /// to use in its logging mechanisms.
-  OwnedHsaco convertModuleToHsaco(llvm::Module &llvmModule, Location loc,
-                                  StringRef name);
+  /// Converts llvmModule to a lob with target instructions using the
+  /// user-provided generator. Location is used for error reporting and name is
+  /// forwarded to the blob generator to use in its logging mechanisms.
+  OwnedBlob convertModuleToBlob(llvm::Module &llvmModule, Location loc,
+                                StringRef name);
 
-  /// Translates llvmModule to hsaco and returns the result as attribute.
-  StringAttr translateGPUModuleToHsacoAnnotation(llvm::Module &llvmModule,
-                                                 Location loc, StringRef name);
+  /// Translates llvmModule to a blob with target instructions and returns the
+  /// result as attribute.
+  StringAttr translateGPUModuleToBinaryAnnotation(llvm::Module &llvmModule,
+                                                  Location loc, StringRef name);
 
-  HsacoGenerator hsacoGenerator;
+  InitBackendCallback initBackendCallback;
+  LoweringCallback loweringCallback;
+  BlobGenerator blobGenerator;
   llvm::Triple triple;
   StringRef targetChip;
   StringRef features;
+  StringRef blobAnnotation;
 };
 
 } // anonymous namespace
 
 std::string
-GpuKernelToHsacoPass::translateModuleToISA(llvm::Module &module,
-                                           llvm::TargetMachine &targetMachine) {
+GpuKernelToBlobPass::translateModuleToISA(llvm::Module &module,
+                                          llvm::TargetMachine &targetMachine) {
   std::string targetISA;
   {
     // Clone the llvm module into a new context to enable concurrent compilation
@@ -127,9 +132,9 @@ GpuKernelToHsacoPass::translateModuleToISA(llvm::Module &module,
   return targetISA;
 }
 
-OwnedHsaco GpuKernelToHsacoPass::convertModuleToHsaco(llvm::Module &llvmModule,
-                                                      Location loc,
-                                                      StringRef name) {
+OwnedBlob GpuKernelToBlobPass::convertModuleToBlob(llvm::Module &llvmModule,
+                                                   Location loc,
+                                                   StringRef name) {
   std::unique_ptr<llvm::TargetMachine> targetMachine;
   {
     std::string error;
@@ -147,21 +152,25 @@ OwnedHsaco GpuKernelToHsacoPass::convertModuleToHsaco(llvm::Module &llvmModule,
 
   auto targetISA = translateModuleToISA(llvmModule, *targetMachine);
 
-  return hsacoGenerator(targetISA, loc, name);
+  return blobGenerator(targetISA, loc, name);
 }
 
-StringAttr GpuKernelToHsacoPass::translateGPUModuleToHsacoAnnotation(
+StringAttr GpuKernelToBlobPass::translateGPUModuleToBinaryAnnotation(
     llvm::Module &llvmModule, Location loc, StringRef name) {
-  auto hsaco = convertModuleToHsaco(llvmModule, loc, name);
-  if (!hsaco)
+  auto blob = convertModuleToBlob(llvmModule, loc, name);
+  if (!blob)
     return {};
-  return StringAttr::get({hsaco->data(), hsaco->size()}, loc->getContext());
+  return StringAttr::get({blob->data(), blob->size()}, loc->getContext());
 }
 
 std::unique_ptr<OperationPass<gpu::GPUModuleOp>>
-mlir::createConvertGPUKernelToHsacoPass(HsacoGenerator hsacoGenerator,
-                                        StringRef triple, StringRef targetChip,
-                                        StringRef features) {
-  return std::make_unique<GpuKernelToHsacoPass>(hsacoGenerator, triple,
-                                                targetChip, features);
+mlir::createConvertGPUKernelToBlobPass(InitBackendCallback initBackendCallback,
+                                       LoweringCallback loweringCallback,
+                                       BlobGenerator blobGenerator,
+                                       StringRef triple, StringRef targetChip,
+                                       StringRef features,
+                                       StringRef gpuBinaryAnnotation) {
+  return std::make_unique<GpuKernelToBlobPass>(
+      initBackendCallback, loweringCallback, blobGenerator, triple, targetChip,
+      features, gpuBinaryAnnotation);
 }

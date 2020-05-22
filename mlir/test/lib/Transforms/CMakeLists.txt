@@ -33,6 +33,10 @@ add_mlir_library(MLIRTestTransforms
   MLIRTestVectorTransformPatternsIncGen
 
   LINK_LIBS PUBLIC
+  LLVMMC
+  LLVMAMDGPUCodeGen
+  LLVMAMDGPUDesc
+  LLVMAMDGPUInfo
   MLIRAffineOps
   MLIRAnalysis
   MLIREDSC
@@ -44,7 +48,9 @@ add_mlir_library(MLIRTestTransforms
   MLIRSCF
   MLIRGPU
   MLIRPass
+  MLIRROCDLIR
   MLIRStandardOpsTransforms
+  MLIRTargetROCDLIR
   MLIRTestDialect
   MLIRTransformUtils
   MLIRVectorToSCF
