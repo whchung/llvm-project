@@ -2,16 +2,16 @@ set(SOURCES
   ConvertLaunchFuncToRuntimeCalls.cpp
 )
 
-if (MLIR_CUDA_CONVERSIONS_ENABLED)
- list(APPEND SOURCES "ConvertKernelFuncToBlob.cpp")
-  set(NVPTX_LIBS
-    MC
-    NVPTXCodeGen
-    NVPTXDesc
-    NVPTXInfo
-  )
-
-endif()
+if (MLIR_CUDA_CONVERSIONS_ENABLED OR MLIR_ROCM_CONVERSIONS_ENABLED)
+  list(APPEND SOURCES "ConvertKernelFuncToBlob.cpp")
+  if (MLIR_CUDA_CONVERSIONS_ENABLED)
+    set(NVPTX_LIBS
+      MC
+      NVPTXCodeGen
+      NVPTXDesc
+      NVPTXInfo
+    )
+  endif()
 
 add_mlir_conversion_library(MLIRGPUtoGPURuntimeTransforms
   ${SOURCES}
@@ -33,3 +33,6 @@ add_mlir_conversion_library(MLIRGPUtoGPURuntimeTransforms
   MLIRSupport
   MLIRTargetNVVMIR
 )
+else()
+  add_library(MLIRGPUtoGPURuntimeTransforms INTERFACE IMPORTED GLOBAL)
+endif()

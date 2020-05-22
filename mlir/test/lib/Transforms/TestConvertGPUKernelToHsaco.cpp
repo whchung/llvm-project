@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Conversion/GPUToROCm/GPUToROCmPass.h"
+#include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/ROCDLIR.h"
