@@ -15,7 +15,6 @@
 #include "llvm/ADT/STLExtras.h"
 
 #include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
-#include "mlir/Conversion/GPUToCUDA/GPUToCUDAPass.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
@@ -30,6 +29,7 @@
 #include "mlir/InitAllDialects.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Target/NVVMIR.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/InitLLVM.h"
@@ -57,7 +57,25 @@ inline void emit_cuda_error(const llvm::Twine &message, const char *buffer,
     }                                                                          \
   }
 
-OwnedCubin compilePtxToCubin(const std::string ptx, Location loc,
+static LogicalResult initNVPTXBackend() {
+  // Make sure the NVPTX target is initialized.
+  LLVMInitializeNVPTXTarget();
+  LLVMInitializeNVPTXTargetInfo();
+  LLVMInitializeNVPTXTargetMC();
+  LLVMInitializeNVPTXAsmPrinter();
+  return success();
+}
+
+static LogicalResult
+compileModuleToNVVMIR(Operation *m,
+                       std::unique_ptr<llvm::Module> &llvmModule) {
+  llvmModule = translateModuleToNVVMIR(m);
+  if (llvmModule)
+    return success();
+  return failure();
+}
+
+OwnedBlob compilePtxToCubin(const std::string ptx, Location loc,
                              StringRef name) {
   char jitErrorBuffer[4096] = {0};
 
@@ -97,7 +115,7 @@ OwnedCubin compilePtxToCubin(const std::string ptx, Location loc,
                        "cuLinkComplete");
 
   char *cubinAsChar = static_cast<char *>(cubinData);
-  OwnedCubin result =
+  OwnedBlob result =
       std::make_unique<std::vector<char>>(cubinAsChar, cubinAsChar + cubinSize);
 
   // This will also destroy the cubin data.
@@ -114,7 +132,9 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   auto &kernelPm = pm.nest<gpu::GPUModuleOp>();
   kernelPm.addPass(createStripDebugInfoPass());
   kernelPm.addPass(createLowerGpuOpsToNVVMOpsPass());
-  kernelPm.addPass(createConvertGPUKernelToCubinPass(&compilePtxToCubin));
+  kernelPm.addPass(createConvertGPUKernelToBlobPass(
+      &initNVPTXBackend, &compileModuleToNVVMIR, &compilePtxToCubin,
+      "nvptx64-nvidia-cuda", "sm_35", "+ptx60", "nvvm.cubin"));
   pm.addPass(createLowerToLLVMPass());
   pm.addPass(createConvertGpuLaunchFuncToGpuRuntimeCallsPass());
 
