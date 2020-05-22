@@ -41,8 +41,8 @@ add_mlir_library(MLIRTestTransforms
   MLIRAnalysis
   MLIREDSC
   MLIRGPU
-  MLIRGPUtoCUDATransforms
   MLIRGPUtoROCmTransforms
+  MLIRGPUtoGPURuntimeTransforms
   MLIRLinalgOps
   MLIRLinalgTransforms
   MLIRSCF
