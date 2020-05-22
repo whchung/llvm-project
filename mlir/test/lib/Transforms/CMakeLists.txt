@@ -1,3 +1,25 @@
+if (MLIR_CUDA_CONVERSIONS_ENABLED)
+  set(NVPTX_LIBS
+    LLVMMC
+    LLVMNVPTXCodeGen
+    LLVMNVPTXDesc
+    LLVMNVPTXInfo
+    MLIRNVVMIR
+    MLIRTargetNVVMIR
+  )
+endif()
+
+if (MLIR_ROCM_CONVERSIONS_ENABLED)
+  set(AMDGPU_LIBS
+    LLVMMC
+    LLVMAMDGPUCodeGen
+    LLVMAMDGPUDesc
+    LLVMAMDGPUInfo
+    MLIRROCDLIR
+    MLIRTargetROCDLIR
+  )
+endif()
+
 # Exclude tests from libMLIR.so
 add_mlir_library(MLIRTestTransforms
   TestAllReduceLowering.cpp
@@ -33,10 +55,6 @@ add_mlir_library(MLIRTestTransforms
   MLIRTestVectorTransformPatternsIncGen
 
   LINK_LIBS PUBLIC
-  LLVMMC
-  LLVMAMDGPUCodeGen
-  LLVMAMDGPUDesc
-  LLVMAMDGPUInfo
   MLIRAffineOps
   MLIRAnalysis
   MLIREDSC
@@ -47,13 +65,13 @@ add_mlir_library(MLIRTestTransforms
   MLIRSCF
   MLIRGPU
   MLIRPass
-  MLIRROCDLIR
   MLIRStandardOpsTransforms
-  MLIRTargetROCDLIR
   MLIRTestDialect
   MLIRTransformUtils
   MLIRVectorToSCF
   MLIRVector
+  ${AMDGPU_LIBS}
+  ${NVPTX_LIBS}
   )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../Dialect/Test)

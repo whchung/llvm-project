@@ -40,10 +40,6 @@ using InitBackendCallback = std::function<LogicalResult()>;
 using LoweringCallback =
     std::function<LogicalResult(Operation *, std::unique_ptr<llvm::Module> &)>;
 
-using OwnedCubin = std::unique_ptr<std::vector<char>>;
-using CubinGenerator =
-      std::function<OwnedCubin(const std::string &, Location, StringRef)>;
-
 /// Creates a pass to convert a gpu.launch_func operation into a sequence of
 /// GPU runtime calls.
 ///
@@ -55,18 +51,6 @@ createConvertGpuLaunchFuncToGpuRuntimeCallsPass();
 std::unique_ptr<OperationPass<ModuleOp>>
 createConvertGpuLaunchFuncToGpuRuntimeCallsPass(
     std::string gpuBinaryAnnotation);
-
-/// Creates a pass to convert kernel functions into CUBIN blobs.
-///
-/// This transformation takes the body of each function that is annotated with
-/// the 'nvvm.kernel' attribute, copies it to a new LLVM module, compiles the
-/// module with help of the nvptx backend to PTX and then invokes the provided
-/// cubinGenerator to produce a binary blob (the cubin). Such blob is then
-/// attached as a string attribute named 'nvvm.cubin' to the kernel function.
-/// After the transformation, the body of the kernel function is removed (i.e.,
-/// it is turned into a declaration).
-std::unique_ptr<OperationPass<gpu::GPUModuleOp>>
-  createConvertGPUKernelToCubinPass(CubinGenerator cubinGenerator);
 
 /// Creates a pass to convert kernel functions into GPU target object blobs.
 ///
