@@ -11,7 +11,8 @@ add_mlir_dialect_library(MLIRMIOpenTuning
 
 if (MLIR_ENABLE_SQLITE)
   # MLIR now depends on SQLite and existence of miopen perfdb
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/mlir/cmake")
+  list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake")
+  message("module path ${CMAKE_MODULE_PATH}")
   set (SQLITE3_FOUND 0)
   find_package(SQLite3)
   if (SQLITE3_FOUND)
@@ -36,5 +37,7 @@ target_link_libraries(MLIRMIOpenTuning
   PRIVATE
   MLIRIR
   stdc++fs
-  ${SQLITE3_LIBRARIES}
+  #dl
+  #${SQLITE3_LIBRARIES}
+  sqlite3
 )
