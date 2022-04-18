@@ -1667,16 +1667,16 @@ void SIScheduleBlockScheduler::addLiveRegs(std::set<unsigned> &Regs) {
 
 void SIScheduleBlockScheduler::decreaseLiveRegs(SIScheduleBlock *Block,
                                        std::set<unsigned> &Regs) {
-  for (unsigned Reg : Regs) {
-    // For now only track virtual registers.
-    std::set<unsigned>::iterator Pos = LiveRegs.find(Reg);
-    assert (Pos != LiveRegs.end() && // Reg must be live.
-               LiveRegsConsumers.find(Reg) != LiveRegsConsumers.end() &&
-               LiveRegsConsumers[Reg] >= 1);
-    --LiveRegsConsumers[Reg];
-    if (LiveRegsConsumers[Reg] == 0)
-      LiveRegs.erase(Pos);
-  }
+//  for (unsigned Reg : Regs) {
+//    // For now only track virtual registers.
+//    std::set<unsigned>::iterator Pos = LiveRegs.find(Reg);
+//    assert (Pos != LiveRegs.end() && // Reg must be live.
+//               LiveRegsConsumers.find(Reg) != LiveRegsConsumers.end() &&
+//               LiveRegsConsumers[Reg] >= 1);
+//    --LiveRegsConsumers[Reg];
+//    if (LiveRegsConsumers[Reg] == 0)
+//      LiveRegs.erase(Pos);
+//  }
 }
 
 void SIScheduleBlockScheduler::releaseBlockSuccs(SIScheduleBlock *Parent) {
@@ -1694,12 +1694,12 @@ void SIScheduleBlockScheduler::blockScheduled(SIScheduleBlock *Block) {
   decreaseLiveRegs(Block, Block->getInRegs());
   addLiveRegs(Block->getOutRegs());
   releaseBlockSuccs(Block);
-  for (const auto &RegP : LiveOutRegsNumUsages[Block->getID()]) {
-    // We produce this register, thus it must not be previously alive.
-    assert(LiveRegsConsumers.find(RegP.first) == LiveRegsConsumers.end() ||
-           LiveRegsConsumers[RegP.first] == 0);
-    LiveRegsConsumers[RegP.first] += RegP.second;
-  }
+//  for (const auto &RegP : LiveOutRegsNumUsages[Block->getID()]) {
+//    // We produce this register, thus it must not be previously alive.
+//    assert(LiveRegsConsumers.find(RegP.first) == LiveRegsConsumers.end() ||
+//           LiveRegsConsumers[RegP.first] == 0);
+//    LiveRegsConsumers[RegP.first] += RegP.second;
+//  }
   if (LastPosHighLatencyParentScheduled[Block->getID()] >
         (unsigned)LastPosWaitedHighLatency)
     LastPosWaitedHighLatency =
@@ -1717,8 +1717,8 @@ SIScheduleBlockScheduler::checkRegUsageImpact(std::set<unsigned> &InRegs,
     // For now only track virtual registers.
     if (!Reg.isVirtual())
       continue;
-    if (LiveRegsConsumers[Reg] > 1)
-      continue;
+//    if (LiveRegsConsumers[Reg] > 1)
+//      continue;
     PSetIterator PSetI = DAG->getMRI()->getPressureSets(Reg);
     for (; PSetI.isValid(); ++PSetI) {
       DiffSetPressure[*PSetI] -= PSetI.getWeight();
@@ -1987,7 +1987,7 @@ void SIScheduleDAGMI::schedule()
 
   // Tell the outside world about the result of the scheduling.
 
-  assert(TopRPTracker.getPos() == RegionBegin && "bad initial Top tracker");
+  //assert(TopRPTracker.getPos() == RegionBegin && "bad initial Top tracker");
   TopRPTracker.setPos(CurrentTop);
 
   for (unsigned I : ScheduledSUnits) {
