@@ -438,7 +438,7 @@ public:
   ~SIScheduleDAGMI() override;
 
   // Entry point for the schedule.
-  void schedule() override;
+  //void schedule() override;
 
   // To init Block's RPTracker.
   void initRPTracker(RegPressureTracker &RPTracker) {

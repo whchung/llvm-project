@@ -16,6 +16,7 @@
 #include "MCTargetDesc/AMDGPUMCTargetDesc.h"
 #include "llvm/CodeGen/LiveIntervals.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/ScheduleDFS.h"
 
 using namespace llvm;
 
@@ -525,12 +526,12 @@ void SIScheduleBlock::addPred(SIScheduleBlock *Pred) {
   }
   Preds.push_back(Pred);
 
-  assert(none_of(Succs,
-                 [=](std::pair<SIScheduleBlock*,
-                     SIScheduleBlockLinkKind> S) {
-                   return PredID == S.first->getID();
-                    }) &&
-         "Loop in the Block Graph!");
+  //assert(none_of(Succs,
+  //               [=](std::pair<SIScheduleBlock*,
+  //                   SIScheduleBlockLinkKind> S) {
+  //                 return PredID == S.first->getID();
+  //                  }) &&
+  //       "Loop in the Block Graph!");
 }
 
 void SIScheduleBlock::addSucc(SIScheduleBlock *Succ,
@@ -1287,13 +1288,13 @@ void SIScheduleBlockCreator::topologicalSort() {
 
 #ifndef NDEBUG
   // Check correctness of the ordering.
-  for (unsigned i = 0, e = DAGSize; i != e; ++i) {
-    SIScheduleBlock *Block = CurrentBlocks[i];
-    for (SIScheduleBlock* Pred : Block->getPreds()) {
-      assert(TopDownBlock2Index[i] > TopDownBlock2Index[Pred->getID()] &&
-      "Wrong Top Down topological sorting");
-    }
-  }
+  // for (unsigned i = 0, e = DAGSize; i != e; ++i) {
+  //   SIScheduleBlock *Block = CurrentBlocks[i];
+  //   for (SIScheduleBlock* Pred : Block->getPreds()) {
+  //     assert(TopDownBlock2Index[i] > TopDownBlock2Index[Pred->getID()] &&
+  //     "Wrong Top Down topological sorting");
+  //   }
+  // }
 #endif
 
   BottomUpIndex2Block = std::vector<int>(TopDownIndex2Block.rbegin(),
@@ -1886,127 +1887,166 @@ SIScheduleDAGMI::fillVgprSgprCost(_Iterator First, _Iterator End,
   }
 }
 
-void SIScheduleDAGMI::schedule()
-{
-  SmallVector<SUnit*, 8> TopRoots, BotRoots;
-  SIScheduleBlockResult Best, Temp;
-  LLVM_DEBUG(dbgs() << "Preparing Scheduling\n");
-
-  buildDAGWithRegPressure();
-  LLVM_DEBUG(dump());
-
-  topologicalSort();
-  findRootsAndBiasEdges(TopRoots, BotRoots);
-  // We reuse several ScheduleDAGMI and ScheduleDAGMILive
-  // functions, but to make them happy we must initialize
-  // the default Scheduler implementation (even if we do not
-  // run it)
-  SchedImpl->initialize(this);
-  initQueues(TopRoots, BotRoots);
-
-  // Fill some stats to help scheduling.
-
-  SUnitsLinksBackup = SUnits;
-  IsLowLatencySU.clear();
-  LowLatencyOffset.clear();
-  IsHighLatencySU.clear();
-
-  IsLowLatencySU.resize(SUnits.size(), 0);
-  LowLatencyOffset.resize(SUnits.size(), 0);
-  IsHighLatencySU.resize(SUnits.size(), 0);
-
-  for (unsigned i = 0, e = (unsigned)SUnits.size(); i != e; ++i) {
-    SUnit *SU = &SUnits[i];
-    const MachineOperand *BaseLatOp;
-    int64_t OffLatReg;
-    if (SITII->isLowLatencyInstruction(*SU->getInstr())) {
-      IsLowLatencySU[i] = 1;
-      bool OffsetIsScalable;
-      if (SITII->getMemOperandWithOffset(*SU->getInstr(), BaseLatOp, OffLatReg,
-                                         OffsetIsScalable, TRI))
-        LowLatencyOffset[i] = OffLatReg;
-    } else if (SITII->isHighLatencyDef(SU->getInstr()->getOpcode()))
-      IsHighLatencySU[i] = 1;
-  }
-
-  SIScheduler Scheduler(this);
-  Best = Scheduler.scheduleVariant(SISchedulerBlockCreatorVariant::LatenciesAlone,
-                                   SISchedulerBlockSchedulerVariant::BlockLatencyRegUsage);
-
-  // if VGPR usage is extremely high, try other good performing variants
-  // which could lead to lower VGPR usage
-  if (Best.MaxVGPRUsage > 180) {
-    static const std::pair<SISchedulerBlockCreatorVariant,
-                           SISchedulerBlockSchedulerVariant>
-        Variants[] = {
-      { LatenciesAlone, BlockRegUsageLatency },
-//      { LatenciesAlone, BlockRegUsage },
-      { LatenciesGrouped, BlockLatencyRegUsage },
-//      { LatenciesGrouped, BlockRegUsageLatency },
-//      { LatenciesGrouped, BlockRegUsage },
-      { LatenciesAlonePlusConsecutive, BlockLatencyRegUsage },
-//      { LatenciesAlonePlusConsecutive, BlockRegUsageLatency },
-//      { LatenciesAlonePlusConsecutive, BlockRegUsage }
-    };
-    for (std::pair<SISchedulerBlockCreatorVariant, SISchedulerBlockSchedulerVariant> v : Variants) {
-      Temp = Scheduler.scheduleVariant(v.first, v.second);
-      if (Temp.MaxVGPRUsage < Best.MaxVGPRUsage)
-        Best = Temp;
-    }
-  }
-  // if VGPR usage is still extremely high, we may spill. Try other variants
-  // which are less performing, but that could lead to lower VGPR usage.
-  if (Best.MaxVGPRUsage > 200) {
-    static const std::pair<SISchedulerBlockCreatorVariant,
-                           SISchedulerBlockSchedulerVariant>
-        Variants[] = {
-//      { LatenciesAlone, BlockRegUsageLatency },
-      { LatenciesAlone, BlockRegUsage },
-//      { LatenciesGrouped, BlockLatencyRegUsage },
-      { LatenciesGrouped, BlockRegUsageLatency },
-      { LatenciesGrouped, BlockRegUsage },
-//      { LatenciesAlonePlusConsecutive, BlockLatencyRegUsage },
-      { LatenciesAlonePlusConsecutive, BlockRegUsageLatency },
-      { LatenciesAlonePlusConsecutive, BlockRegUsage }
-    };
-    for (std::pair<SISchedulerBlockCreatorVariant, SISchedulerBlockSchedulerVariant> v : Variants) {
-      Temp = Scheduler.scheduleVariant(v.first, v.second);
-      if (Temp.MaxVGPRUsage < Best.MaxVGPRUsage)
-        Best = Temp;
-    }
-  }
-
-  ScheduledSUnits = Best.SUs;
-  ScheduledSUnitsInv.resize(SUnits.size());
-
-  for (unsigned i = 0, e = (unsigned)SUnits.size(); i != e; ++i) {
-    ScheduledSUnitsInv[ScheduledSUnits[i]] = i;
-  }
-
-  moveLowLatencies();
-
-  // Tell the outside world about the result of the scheduling.
-
-  //assert(TopRPTracker.getPos() == RegionBegin && "bad initial Top tracker");
-  TopRPTracker.setPos(CurrentTop);
-
-  for (unsigned I : ScheduledSUnits) {
-    SUnit *SU = &SUnits[I];
-
-    scheduleMI(SU, true);
-
-    LLVM_DEBUG(dbgs() << "Scheduling SU(" << SU->NodeNum << ") "
-                      << *SU->getInstr());
-  }
-
-  assert(CurrentTop == CurrentBottom && "Nonempty unscheduled zone.");
-
-  placeDebugValues();
-
-  LLVM_DEBUG({
-    dbgs() << "*** Final schedule for "
-           << printMBBReference(*begin()->getParent()) << " ***\n";
-    dumpSchedule();
-    dbgs() << '\n';
-  });
-}
+//void SIScheduleDAGMI::schedule()
+//{
+//  SmallVector<SUnit*, 8> TopRoots, BotRoots;
+//  SIScheduleBlockResult Best, Temp;
+//  LLVM_DEBUG(dbgs() << "Preparing Scheduling\n");
+//
+//  LLVM_DEBUG(dump());
+//  buildSchedGraph(AA);
+//  postprocessDAG();
+//
+//  findRootsAndBiasEdges(TopRoots, BotRoots);
+//  // We reuse several ScheduleDAGMI and ScheduleDAGMILive
+//  // functions, but to make them happy we must initialize
+//  // the default Scheduler implementation (even if we do not
+//  // run it)
+//  SchedImpl->initialize(this);
+//  initQueues(TopRoots, BotRoots);
+//
+//#if 1
+//  bool IsTopNode = false;
+//  while (true) {
+//    LLVM_DEBUG(dbgs() << "** ScheduleDAGMILive::schedule picking next node\n");
+//    SUnit *SU = SchedImpl->pickNode(IsTopNode);
+//    if (!SU) break;
+//
+//    assert(!SU->isScheduled && "Node already scheduled");
+//    if (!checkSchedLimit())
+//      break;
+//
+//    scheduleMI(SU, IsTopNode);
+//
+//    if (DFSResult) {
+//      unsigned SubtreeID = DFSResult->getSubtreeID(SU);
+//      if (!ScheduledTrees.test(SubtreeID)) {
+//        ScheduledTrees.set(SubtreeID);
+//        DFSResult->scheduleTree(SubtreeID);
+//        SchedImpl->scheduleTree(SubtreeID);
+//      }
+//    }
+//
+//    // Notify the scheduling strategy after updating the DAG.
+//    SchedImpl->schedNode(SU, IsTopNode);
+//
+//    updateQueues(SU, IsTopNode);
+//  }
+//  assert(CurrentTop == CurrentBottom && "Nonempty unscheduled zone.");
+//
+//  placeDebugValues();
+//
+//  LLVM_DEBUG({
+//    dbgs() << "*** Final schedule for "
+//           << printMBBReference(*begin()->getParent()) << " ***\n";
+//    dumpSchedule();
+//    dbgs() << '\n';
+//  });
+//#else
+//  // Fill some stats to help scheduling.
+//
+//  SUnitsLinksBackup = SUnits;
+//  IsLowLatencySU.clear();
+//  LowLatencyOffset.clear();
+//  IsHighLatencySU.clear();
+//
+//  IsLowLatencySU.resize(SUnits.size(), 0);
+//  LowLatencyOffset.resize(SUnits.size(), 0);
+//  IsHighLatencySU.resize(SUnits.size(), 0);
+//
+//  for (unsigned i = 0, e = (unsigned)SUnits.size(); i != e; ++i) {
+//    SUnit *SU = &SUnits[i];
+//    const MachineOperand *BaseLatOp;
+//    int64_t OffLatReg;
+//    if (SITII->isLowLatencyInstruction(*SU->getInstr())) {
+//      IsLowLatencySU[i] = 1;
+//      bool OffsetIsScalable;
+//      if (SITII->getMemOperandWithOffset(*SU->getInstr(), BaseLatOp, OffLatReg,
+//                                         OffsetIsScalable, TRI))
+//        LowLatencyOffset[i] = OffLatReg;
+//    } else if (SITII->isHighLatencyDef(SU->getInstr()->getOpcode()))
+//      IsHighLatencySU[i] = 1;
+//  }
+//
+//  //  SIScheduler Scheduler(this);
+//  //  Best = Scheduler.scheduleVariant(SISchedulerBlockCreatorVariant::LatenciesAlone,
+//  //                                   SISchedulerBlockSchedulerVariant::BlockLatencyRegUsage);
+//
+//  //  // if VGPR usage is extremely high, try other good performing variants
+//  //  // which could lead to lower VGPR usage
+//  //  if (Best.MaxVGPRUsage > 180) {
+//  //    static const std::pair<SISchedulerBlockCreatorVariant,
+//  //                           SISchedulerBlockSchedulerVariant>
+//  //        Variants[] = {
+//  //      { LatenciesAlone, BlockRegUsageLatency },
+//////        { LatenciesAlone, BlockRegUsage },
+//  //      { LatenciesGrouped, BlockLatencyRegUsage },
+//////        { LatenciesGrouped, BlockRegUsageLatency },
+//////        { LatenciesGrouped, BlockRegUsage },
+//  //      { LatenciesAlonePlusConsecutive, BlockLatencyRegUsage },
+//////        { LatenciesAlonePlusConsecutive, BlockRegUsageLatency },
+//////        { LatenciesAlonePlusConsecutive, BlockRegUsage }
+//  //    };
+//  //    for (std::pair<SISchedulerBlockCreatorVariant, SISchedulerBlockSchedulerVariant> v : Variants) {
+//  //      Temp = Scheduler.scheduleVariant(v.first, v.second);
+//  //      if (Temp.MaxVGPRUsage < Best.MaxVGPRUsage)
+//  //        Best = Temp;
+//  //    }
+//  //  }
+//  //  // if VGPR usage is still extremely high, we may spill. Try other variants
+//  //  // which are less performing, but that could lead to lower VGPR usage.
+//  //  if (Best.MaxVGPRUsage > 200) {
+//  //    static const std::pair<SISchedulerBlockCreatorVariant,
+//  //                           SISchedulerBlockSchedulerVariant>
+//  //        Variants[] = {
+//////        { LatenciesAlone, BlockRegUsageLatency },
+//  //      { LatenciesAlone, BlockRegUsage },
+//////        { LatenciesGrouped, BlockLatencyRegUsage },
+//  //      { LatenciesGrouped, BlockRegUsageLatency },
+//  //      { LatenciesGrouped, BlockRegUsage },
+//////        { LatenciesAlonePlusConsecutive, BlockLatencyRegUsage },
+//  //      { LatenciesAlonePlusConsecutive, BlockRegUsageLatency },
+//  //      { LatenciesAlonePlusConsecutive, BlockRegUsage }
+//  //    };
+//  //    for (std::pair<SISchedulerBlockCreatorVariant, SISchedulerBlockSchedulerVariant> v : Variants) {
+//  //      Temp = Scheduler.scheduleVariant(v.first, v.second);
+//  //      if (Temp.MaxVGPRUsage < Best.MaxVGPRUsage)
+//  //        Best = Temp;
+//  //    }
+//  //  }
+//
+//  //  ScheduledSUnits = Best.SUs;
+//  //  ScheduledSUnitsInv.resize(SUnits.size());
+//
+//  //  for (unsigned i = 0, e = (unsigned)SUnits.size(); i != e; ++i) {
+//  //    ScheduledSUnitsInv[ScheduledSUnits[i]] = i;
+//  //  }
+//
+//  //  moveLowLatencies();
+//
+//  //  // Tell the outside world about the result of the scheduling.
+//
+//  //  //assert(TopRPTracker.getPos() == RegionBegin && "bad initial Top tracker");
+//  //  TopRPTracker.setPos(CurrentTop);
+//
+//  //  for (unsigned I : ScheduledSUnits) {
+//  //    SUnit *SU = &SUnits[I];
+//
+//  //    scheduleMI(SU, true);
+//
+//  //    LLVM_DEBUG(dbgs() << "Scheduling SU(" << SU->NodeNum << ") "
+//  //                      << *SU->getInstr());
+//  //  }
+//
+//  //assert(CurrentTop == CurrentBottom && "Nonempty unscheduled zone.");
+//
+//  //placeDebugValues();
+//
+//  LLVM_DEBUG({
+//    dbgs() << "*** Final schedule for "
+//           << printMBBReference(*begin()->getParent()) << " ***\n";
+//    dumpSchedule();
+//    dbgs() << '\n';
+//  });
+//#endif
+//}
