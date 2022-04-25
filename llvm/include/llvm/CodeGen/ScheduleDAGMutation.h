@@ -37,6 +37,7 @@ public:
 /// Post-process the DAG to create cluster edges between neighboring
 /// loads or between neighboring stores.
 class BaseMemOpClusterMutation : public ScheduleDAGMutation {
+protected:
   struct MemOpInfo {
     SUnit *SU;
     SmallVector<const MachineOperand *, 4> BaseOps;
@@ -81,8 +82,8 @@ public:
 protected:
   void clusterNeighboringMemOps(ArrayRef<MemOpInfo> MemOps, bool FastCluster,
                                 ScheduleDAGInstrs *DAG);
-  void collectMemOpRecords(std::vector<SUnit> &SUnits,
-                           SmallVectorImpl<MemOpInfo> &MemOpRecords);
+  virtual void collectMemOpRecords(std::vector<SUnit> &SUnits,
+                                   SmallVectorImpl<MemOpInfo> &MemOpRecords);
   bool groupMemOps(ArrayRef<MemOpInfo> MemOps, ScheduleDAGInstrs *DAG,
                    DenseMap<unsigned, SmallVector<MemOpInfo, 32>> &Groups);
 };
