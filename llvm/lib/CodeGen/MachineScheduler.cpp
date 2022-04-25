@@ -1486,75 +1486,6 @@ void ScheduleDAGMILive::scheduleMI(SUnit *SU, bool IsTopNode) {
 
 namespace {
 
-/// Post-process the DAG to create cluster edges between neighboring
-/// loads or between neighboring stores.
-class BaseMemOpClusterMutation : public ScheduleDAGMutation {
-  struct MemOpInfo {
-    SUnit *SU;
-    SmallVector<const MachineOperand *, 4> BaseOps;
-    int64_t Offset;
-    unsigned Width;
-
-    MemOpInfo(SUnit *SU, ArrayRef<const MachineOperand *> BaseOps,
-              int64_t Offset, unsigned Width)
-        : SU(SU), BaseOps(BaseOps.begin(), BaseOps.end()), Offset(Offset),
-          Width(Width) {}
-
-    static bool Compare(const MachineOperand *const &A,
-                        const MachineOperand *const &B) {
-      if (A->getType() != B->getType())
-        return A->getType() < B->getType();
-      if (A->isReg())
-        return A->getReg() < B->getReg();
-      if (A->isFI()) {
-        const MachineFunction &MF = *A->getParent()->getParent()->getParent();
-        const TargetFrameLowering &TFI = *MF.getSubtarget().getFrameLowering();
-        bool StackGrowsDown = TFI.getStackGrowthDirection() ==
-                              TargetFrameLowering::StackGrowsDown;
-        return StackGrowsDown ? A->getIndex() > B->getIndex()
-                              : A->getIndex() < B->getIndex();
-      }
-
-      llvm_unreachable("MemOpClusterMutation only supports register or frame "
-                       "index bases.");
-    }
-
-    bool operator<(const MemOpInfo &RHS) const {
-      // FIXME: Don't compare everything twice. Maybe use C++20 three way
-      // comparison instead when it's available.
-      if (std::lexicographical_compare(BaseOps.begin(), BaseOps.end(),
-                                       RHS.BaseOps.begin(), RHS.BaseOps.end(),
-                                       Compare))
-        return true;
-      if (std::lexicographical_compare(RHS.BaseOps.begin(), RHS.BaseOps.end(),
-                                       BaseOps.begin(), BaseOps.end(), Compare))
-        return false;
-      if (Offset != RHS.Offset)
-        return Offset < RHS.Offset;
-      return SU->NodeNum < RHS.SU->NodeNum;
-    }
-  };
-
-  const TargetInstrInfo *TII;
-  const TargetRegisterInfo *TRI;
-  bool IsLoad;
-
-public:
-  BaseMemOpClusterMutation(const TargetInstrInfo *tii,
-                           const TargetRegisterInfo *tri, bool IsLoad)
-      : TII(tii), TRI(tri), IsLoad(IsLoad) {}
-
-  void apply(ScheduleDAGInstrs *DAGInstrs) override;
-
-protected:
-  void clusterNeighboringMemOps(ArrayRef<MemOpInfo> MemOps, bool FastCluster,
-                                ScheduleDAGInstrs *DAG);
-  void collectMemOpRecords(std::vector<SUnit> &SUnits,
-                           SmallVectorImpl<MemOpInfo> &MemOpRecords);
-  bool groupMemOps(ArrayRef<MemOpInfo> MemOps, ScheduleDAGInstrs *DAG,
-                   DenseMap<unsigned, SmallVector<MemOpInfo, 32>> &Groups);
-};
-
 class StoreClusterMutation : public BaseMemOpClusterMutation {
 public:
   StoreClusterMutation(const TargetInstrInfo *tii,
@@ -1586,7 +1517,24 @@ createStoreClusterDAGMutation(const TargetInstrInfo *TII,
                             : nullptr;
 }
 
-} // end namespace llvm
+bool BaseMemOpClusterMutation::MemOpInfo::Compare(
+    const MachineOperand *const &A, const MachineOperand *const &B) {
+  if (A->getType() != B->getType())
+    return A->getType() < B->getType();
+  if (A->isReg())
+    return A->getReg() < B->getReg();
+  if (A->isFI()) {
+    const MachineFunction &MF = *A->getParent()->getParent()->getParent();
+    const TargetFrameLowering &TFI = *MF.getSubtarget().getFrameLowering();
+    bool StackGrowsDown =
+        TFI.getStackGrowthDirection() == TargetFrameLowering::StackGrowsDown;
+    return StackGrowsDown ? A->getIndex() > B->getIndex()
+                          : A->getIndex() < B->getIndex();
+  }
+
+  llvm_unreachable("MemOpClusterMutation only supports register or frame "
+                   "index bases.");
+}
 
 // Sorting all the loads/stores first, then for each load/store, checking the
 // following load/store one by one, until reach the first non-dependent one and
@@ -1762,6 +1710,8 @@ void BaseMemOpClusterMutation::apply(ScheduleDAGInstrs *DAG) {
     clusterNeighboringMemOps(Group.second, FastCluster, DAG);
   }
 }
+
+} // end namespace llvm
 
 //===----------------------------------------------------------------------===//
 // CopyConstrain - DAG post-processing to encourage copy elimination.
