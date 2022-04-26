@@ -16,6 +16,7 @@
 #include "AMDGPU.h"
 #include "AMDGPUAliasAnalysis.h"
 #include "AMDGPUDSReadClustering.h"
+#include "AMDGPUCustomMutations.h"
 #include "AMDGPUExportClustering.h"
 #include "AMDGPUMacroFusion.h"
 #include "AMDGPUTargetObjectFile.h"
@@ -394,6 +395,7 @@ static ScheduleDAGInstrs *
 createGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
   ScheduleDAGMILive *DAG =
     new GCNScheduleDAGMILive(C, std::make_unique<GCNMaxOccupancySchedStrategy>(C));
+  DAG->addMutation(createAMDGPUCustomDAGMutation());
   DAG->addMutation(createAMDGPUDSReadClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
   DAG->addMutation(createAMDGPUExportClusteringDAGMutation());
@@ -404,6 +406,7 @@ static ScheduleDAGInstrs *
 createIterativeGCNMaxOccupancyMachineScheduler(MachineSchedContext *C) {
   auto DAG = new GCNIterativeScheduler(C,
     GCNIterativeScheduler::SCHEDULE_LEGACYMAXOCCUPANCY);
+  DAG->addMutation(createAMDGPUCustomDAGMutation());
   DAG->addMutation(createAMDGPUDSReadClusterDAGMutation(DAG->TII, DAG->TRI));
   return DAG;
 }
@@ -417,6 +420,7 @@ static ScheduleDAGInstrs *
 createIterativeILPMachineScheduler(MachineSchedContext *C) {
   auto DAG = new GCNIterativeScheduler(C,
     GCNIterativeScheduler::SCHEDULE_ILP);
+  DAG->addMutation(createAMDGPUCustomDAGMutation());
   DAG->addMutation(createAMDGPUDSReadClusterDAGMutation(DAG->TII, DAG->TRI));
   DAG->addMutation(createAMDGPUMacroFusionDAGMutation());
   return DAG;
@@ -888,6 +892,7 @@ public:
   createPostMachineScheduler(MachineSchedContext *C) const override {
     ScheduleDAGMI *DAG = createGenericSchedPostRA(C);
     const GCNSubtarget &ST = C->MF->getSubtarget<GCNSubtarget>();
+    DAG->addMutation(createAMDGPUCustomDAGMutation());
     DAG->addMutation(createAMDGPUDSReadClusterDAGMutation(DAG->TII, DAG->TRI));
     DAG->addMutation(ST.createFillMFMAShadowMutation(DAG->TII));
     return DAG;
@@ -1098,6 +1103,7 @@ bool AMDGPUPassConfig::addGCPasses() {
 llvm::ScheduleDAGInstrs *
 AMDGPUPassConfig::createMachineScheduler(MachineSchedContext *C) const {
   ScheduleDAGMILive *DAG = createGenericSchedLive(C);
+  DAG->addMutation(createAMDGPUCustomDAGMutation());
   DAG->addMutation(createAMDGPUDSReadClusterDAGMutation(DAG->TII, DAG->TRI));
   return DAG;
 }
