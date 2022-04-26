@@ -165,7 +165,7 @@ void GCNMaxOccupancySchedStrategy::pickNodeFromQueue(SchedBoundary &Zone,
       if (TryCand.ResDelta == SchedResourceDelta())
         TryCand.initResourceDelta(Zone.DAG, SchedModel);
       Cand.setBest(TryCand);
-      LLVM_DEBUG(traceCandidate(Cand));
+      traceCandidate(Cand);
     }
   }
 }
@@ -193,14 +193,14 @@ SUnit *GCNMaxOccupancySchedStrategy::pickNodeBidirectional(bool &IsTopNode) {
   setPolicy(TopPolicy, /*IsPostRA=*/false, Top, &Bot);
 
   // See if BotCand is still valid (because we previously scheduled from Top).
-  LLVM_DEBUG(dbgs() << "Picking from Bot:\n");
+  errs() << "Picking from Bot:\n";
   if (!BotCand.isValid() || BotCand.SU->isScheduled ||
       BotCand.Policy != BotPolicy) {
     BotCand.reset(CandPolicy());
     pickNodeFromQueue(Bot, BotPolicy, DAG->getBotRPTracker(), BotCand);
     assert(BotCand.Reason != NoCand && "failed to find the first candidate");
   } else {
-    LLVM_DEBUG(traceCandidate(BotCand));
+    traceCandidate(BotCand);
 #ifndef NDEBUG
     if (VerifyScheduling) {
       SchedCandidate TCand;
@@ -213,14 +213,14 @@ SUnit *GCNMaxOccupancySchedStrategy::pickNodeBidirectional(bool &IsTopNode) {
   }
 
   // Check if the top Q has a better candidate.
-  LLVM_DEBUG(dbgs() << "Picking from Top:\n");
+  errs() << "Picking from Top:\n";
   if (!TopCand.isValid() || TopCand.SU->isScheduled ||
       TopCand.Policy != TopPolicy) {
     TopCand.reset(CandPolicy());
     pickNodeFromQueue(Top, TopPolicy, DAG->getTopRPTracker(), TopCand);
     assert(TopCand.Reason != NoCand && "failed to find the first candidate");
   } else {
-    LLVM_DEBUG(traceCandidate(TopCand));
+    traceCandidate(TopCand);
 #ifndef NDEBUG
     if (VerifyScheduling) {
       SchedCandidate TCand;
@@ -233,15 +233,15 @@ SUnit *GCNMaxOccupancySchedStrategy::pickNodeBidirectional(bool &IsTopNode) {
   }
 
   // Pick best from BotCand and TopCand.
-  LLVM_DEBUG(dbgs() << "Top Cand: "; traceCandidate(TopCand);
-             dbgs() << "Bot Cand: "; traceCandidate(BotCand););
+  errs() << "Top Cand: "; traceCandidate(TopCand);
+             errs() << "Bot Cand: "; traceCandidate(BotCand);
   SchedCandidate Cand = BotCand;
   TopCand.Reason = NoCand;
   GenericScheduler::tryCandidate(Cand, TopCand, nullptr);
   if (TopCand.Reason != NoCand) {
     Cand.setBest(TopCand);
   }
-  LLVM_DEBUG(dbgs() << "Picking: "; traceCandidate(Cand););
+  errs() << "Picking: "; traceCandidate(Cand);
 
   IsTopNode = Cand.AtTop;
   return Cand.SU;
@@ -296,8 +296,8 @@ SUnit *GCNMaxOccupancySchedStrategy::pickNode(bool &IsTopNode) {
     }
   }
 
-  LLVM_DEBUG(dbgs() << "Scheduling SU(" << SU->NodeNum << ") "
-                    << *SU->getInstr());
+  errs() << "Scheduling SU(" << SU->NodeNum << ") "
+                    << *SU->getInstr();
   return SU;
 }
 
@@ -309,7 +309,7 @@ GCNScheduleDAGMILive::GCNScheduleDAGMILive(MachineSchedContext *C,
   StartingOccupancy(MFI.getOccupancy()),
   MinOccupancy(StartingOccupancy), Stage(Collect), RegionIdx(0) {
 
-  LLVM_DEBUG(dbgs() << "Starting occupancy is " << StartingOccupancy << ".\n");
+  errs() << "Starting occupancy is " << StartingOccupancy << ".\n";
 }
 
 void GCNScheduleDAGMILive::schedule() {
@@ -329,12 +329,12 @@ void GCNScheduleDAGMILive::schedule() {
   if (LIS) {
     PressureBefore = Pressure[RegionIdx];
 
-    LLVM_DEBUG(dbgs() << "Pressure before scheduling:\nRegion live-ins:";
-               GCNRPTracker::printLiveRegs(dbgs(), LiveIns[RegionIdx], MRI);
-               dbgs() << "Region live-in pressure:  ";
-               llvm::getRegPressure(MRI, LiveIns[RegionIdx]).print(dbgs());
-               dbgs() << "Region register pressure: ";
-               PressureBefore.print(dbgs()));
+    errs() << "Pressure before scheduling:\nRegion live-ins:";
+               GCNRPTracker::printLiveRegs(errs(), LiveIns[RegionIdx], MRI);
+               errs() << "Region live-in pressure:  ";
+               llvm::getRegPressure(MRI, LiveIns[RegionIdx]).print(errs());
+               errs() << "Region register pressure: ";
+               PressureBefore.print(errs());
   }
 
   GCNMaxOccupancySchedStrategy &S = (GCNMaxOccupancySchedStrategy&)*SchedImpl;
@@ -356,13 +356,13 @@ void GCNScheduleDAGMILive::schedule() {
   // Check the results of scheduling.
   auto PressureAfter = getRealRegPressure();
 
-  LLVM_DEBUG(dbgs() << "Pressure after scheduling: ";
-             PressureAfter.print(dbgs()));
+  errs() << "Pressure after scheduling: ";
+             PressureAfter.print(errs());
 
   if (PressureAfter.getSGPRNum() <= S.SGPRCriticalLimit &&
       PressureAfter.getVGPRNum(ST.hasGFX90AInsts()) <= S.VGPRCriticalLimit) {
     Pressure[RegionIdx] = PressureAfter;
-    LLVM_DEBUG(dbgs() << "Pressure in desired limits, done.\n");
+    errs() << "Pressure in desired limits, done.\n";
     return;
   }
 
@@ -370,8 +370,8 @@ void GCNScheduleDAGMILive::schedule() {
       std::min(S.TargetOccupancy, PressureAfter.getOccupancy(ST));
   unsigned WavesBefore =
       std::min(S.TargetOccupancy, PressureBefore.getOccupancy(ST));
-  LLVM_DEBUG(dbgs() << "Occupancy before scheduling: " << WavesBefore
-                    << ", after " << WavesAfter << ".\n");
+  errs() << "Occupancy before scheduling: " << WavesBefore
+                    << ", after " << WavesAfter << ".\n";
 
   // We may not be able to keep the current target occupancy because of the just
   // scheduled region. We might still be able to revert scheduling if the
@@ -382,16 +382,16 @@ void GCNScheduleDAGMILive::schedule() {
   // attribute.
   if (WavesAfter < WavesBefore && WavesAfter < MinOccupancy &&
       WavesAfter >= MFI.getMinAllowedOccupancy()) {
-    LLVM_DEBUG(dbgs() << "Function is memory bound, allow occupancy drop up to "
-                      << MFI.getMinAllowedOccupancy() << " waves\n");
+    errs() << "Function is memory bound, allow occupancy drop up to "
+                      << MFI.getMinAllowedOccupancy() << " waves\n";
     NewOccupancy = WavesAfter;
   }
 
   if (NewOccupancy < MinOccupancy) {
     MinOccupancy = NewOccupancy;
     MFI.limitOccupancy(MinOccupancy);
-    LLVM_DEBUG(dbgs() << "Occupancy lowered for the function to "
-                      << MinOccupancy << ".\n");
+    errs() << "Occupancy lowered for the function to "
+                      << MinOccupancy << ".\n";
   }
 
   unsigned MaxVGPRs = ST.getMaxNumVGPRs(MF);
@@ -411,7 +411,7 @@ void GCNScheduleDAGMILive::schedule() {
   if (WavesAfter >= MinOccupancy) {
     if (Stage == UnclusteredReschedule &&
         !PressureAfter.less(ST, PressureBefore)) {
-      LLVM_DEBUG(dbgs() << "Unclustered reschedule did not help.\n");
+      errs() << "Unclustered reschedule did not help.\n";
     } else if (WavesAfter > MFI.getMinWavesPerEU() ||
         PressureAfter.less(ST, PressureBefore) ||
         !RescheduleRegions[RegionIdx]) {
@@ -421,11 +421,11 @@ void GCNScheduleDAGMILive::schedule() {
         RescheduleRegions[RegionIdx] = false;
       return;
     } else {
-      LLVM_DEBUG(dbgs() << "New pressure will result in more spilling.\n");
+      errs() << "New pressure will result in more spilling.\n";
     }
   }
 
-  LLVM_DEBUG(dbgs() << "Attempting to revert scheduling.\n");
+  errs() << "Attempting to revert scheduling.\n";
   RescheduleRegions[RegionIdx] = RegionsWithClusters[RegionIdx] ||
                                  (Stage + 1) != UnclusteredReschedule;
   RegionEnd = RegionBegin;
@@ -457,7 +457,7 @@ void GCNScheduleDAGMILive::schedule() {
     }
     RegionEnd = MI->getIterator();
     ++RegionEnd;
-    LLVM_DEBUG(dbgs() << "Scheduling " << *MI);
+    errs() << "Scheduling " << *MI;
   }
   RegionBegin = Unsched.front()->getIterator();
   Regions[RegionIdx] = std::make_pair(RegionBegin, RegionEnd);
@@ -554,7 +554,7 @@ GCNScheduleDAGMILive::getBBLiveInMap() const {
 }
 
 void GCNScheduleDAGMILive::finalizeSchedule() {
-  LLVM_DEBUG(dbgs() << "All regions recorded, starting actual scheduling.\n");
+  errs() << "All regions recorded, starting actual scheduling.\n";
 
   LiveIns.resize(Regions.size());
   Pressure.resize(Regions.size());
@@ -587,18 +587,17 @@ void GCNScheduleDAGMILive::finalizeSchedule() {
       if (Stage == UnclusteredReschedule) {
         if (RescheduleRegions.none())
           continue;
-        LLVM_DEBUG(dbgs() <<
-          "Retrying function scheduling without clustering.\n");
+        errs() <<
+          "Retrying function scheduling without clustering.\n";
       }
 
       if (Stage == ClusteredLowOccupancyReschedule) {
         if (StartingOccupancy <= MinOccupancy)
           break;
 
-        LLVM_DEBUG(
-            dbgs()
+            errs()
             << "Retrying function scheduling with lowest recorded occupancy "
-            << MinOccupancy << ".\n");
+            << MinOccupancy << ".\n";
       }
     }
 
@@ -634,13 +633,13 @@ void GCNScheduleDAGMILive::finalizeSchedule() {
         continue;
       }
 
-      LLVM_DEBUG(dbgs() << "********** MI Scheduling **********\n");
-      LLVM_DEBUG(dbgs() << MF.getName() << ":" << printMBBReference(*MBB) << " "
+      errs() << "********** MI Scheduling **********\n";
+      errs() << MF.getName() << ":" << printMBBReference(*MBB) << " "
                         << MBB->getName() << "\n  From: " << *begin()
                         << "    To: ";
-                 if (RegionEnd != MBB->end()) dbgs() << *RegionEnd;
-                 else dbgs() << "End";
-                 dbgs() << " RegionInstrs: " << NumRegionInstrs << '\n');
+                 if (RegionEnd != MBB->end()) errs() << *RegionEnd;
+                 else errs() << "End";
+                 errs() << " RegionInstrs: " << NumRegionInstrs << '\n';
 
       schedule();
 

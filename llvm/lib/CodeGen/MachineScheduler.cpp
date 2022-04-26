@@ -1544,6 +1544,7 @@ bool BaseMemOpClusterMutation::MemOpInfo::Compare(
 void BaseMemOpClusterMutation::clusterNeighboringMemOps(
     ArrayRef<MemOpInfo> MemOpRecords, bool FastCluster,
     ScheduleDAGInstrs *DAG) {
+  llvm::errs() << "BaseMemOpClusterMutation::clusterNeighboringMemOps IN\n";
   // Keep track of the current cluster length and bytes for each SUnit.
   DenseMap<unsigned, std::pair<unsigned, unsigned>> SUnit2ClusterInfo;
 
@@ -1588,8 +1589,8 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
     if (!DAG->addEdge(SUb, SDep(SUa, SDep::Cluster)))
       continue;
 
-    LLVM_DEBUG(dbgs() << "Cluster ld/st SU(" << SUa->NodeNum << ") - SU("
-                      << SUb->NodeNum << ")\n");
+    errs() << "Cluster ld/st SU(" << SUa->NodeNum << ") - SU("
+                      << SUb->NodeNum << ")\n";
     ++NumClustered;
 
     if (IsLoad) {
@@ -1600,8 +1601,8 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
       for (const SDep &Succ : SUa->Succs) {
         if (Succ.getSUnit() == SUb)
           continue;
-        LLVM_DEBUG(dbgs() << "  Copy Succ SU(" << Succ.getSUnit()->NodeNum
-                          << ")\n");
+        errs() << "  Copy Succ SU(" << Succ.getSUnit()->NodeNum
+                          << ")\n";
         DAG->addEdge(Succ.getSUnit(), SDep(SUb, SDep::Artificial));
       }
     } else {
@@ -1614,8 +1615,8 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
       for (const SDep &Pred : SUb->Preds) {
         if (Pred.getSUnit() == SUa)
           continue;
-        LLVM_DEBUG(dbgs() << "  Copy Pred SU(" << Pred.getSUnit()->NodeNum
-                          << ")\n");
+        errs() << "  Copy Pred SU(" << Pred.getSUnit()->NodeNum
+                          << ")\n";
         DAG->addEdge(SUa, SDep(Pred.getSUnit(), SDep::Artificial));
       }
     }
@@ -1623,10 +1624,11 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
     SUnit2ClusterInfo[MemOpb.SU->NodeNum] = {ClusterLength,
                                              CurrentClusterBytes};
 
-    LLVM_DEBUG(dbgs() << "  Curr cluster length: " << ClusterLength
+    errs() << "  Curr cluster length: " << ClusterLength
                       << ", Curr cluster bytes: " << CurrentClusterBytes
-                      << "\n");
+                      << "\n";
   }
+  llvm::errs() << "BaseMemOpClusterMutation::clusterNeighboringMemOps OUT\n";
 }
 
 void BaseMemOpClusterMutation::collectMemOpRecords(
@@ -1688,10 +1690,12 @@ bool BaseMemOpClusterMutation::groupMemOps(
 
 /// Callback from DAG postProcessing to create cluster edges for loads/stores.
 void BaseMemOpClusterMutation::apply(ScheduleDAGInstrs *DAG) {
+  llvm::errs() << "BaseMemOpClusterMutation::apply IN\n";
   // Collect all the clusterable loads/stores
   SmallVector<MemOpInfo, 32> MemOpRecords;
   collectMemOpRecords(DAG->SUnits, MemOpRecords, DAG);
 
+  llvm::errs() << "MemOpRecords.size(): " << MemOpRecords.size() << "\n";
   if (MemOpRecords.size() < 2)
     return;
 
@@ -1700,8 +1704,11 @@ void BaseMemOpClusterMutation::apply(ScheduleDAGInstrs *DAG) {
   // Notice that, some fusion pair could be lost with this.
   DenseMap<unsigned, SmallVector<MemOpInfo, 32>> Groups;
   bool FastCluster = groupMemOps(MemOpRecords, DAG, Groups);
+  llvm::errs() << "Groups.size(): " << Groups.size() << "\n";
+  llvm::errs() << "FastCluster: " << FastCluster << "\n";
 
   for (auto &Group : Groups) {
+    llvm::errs() << "Group.size(): " << Group.second.size() << "\n";
     // Sorting the loads/stores, so that, we can stop the cluster as early as
     // possible.
     llvm::sort(Group.second);
@@ -1709,6 +1716,7 @@ void BaseMemOpClusterMutation::apply(ScheduleDAGInstrs *DAG) {
     // Trying to cluster all the neighboring loads/stores.
     clusterNeighboringMemOps(Group.second, FastCluster, DAG);
   }
+  llvm::errs() << "BaseMemOpClusterMutation::apply OUT\n";
 }
 
 } // end namespace llvm

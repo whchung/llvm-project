@@ -55,15 +55,16 @@ void DSReadClustering::collectMemOpRecords(
                                            OffsetIsScalable, Width, TRI)) {
       MemOpRecords.push_back(MemOpInfo(&SU, BaseOps, Offset, Width));
 
-      LLVM_DEBUG(dbgs() << "Num BaseOps: " << BaseOps.size() << ", Offset: "
+      errs() << "Num BaseOps: " << BaseOps.size() << ", Offset: "
                         << Offset << ", OffsetIsScalable: " << OffsetIsScalable
-                        << ", Width: " << Width << "\n");
+                        << ", Width: " << Width << "\n";
     }
 #ifndef NDEBUG
     for (auto *Op : BaseOps)
       assert(Op);
 #endif
   }
+  llvm::errs() << "DSReadClustering::collectMemOpRecords OUT\n";
 }
 
 } // end namespace
