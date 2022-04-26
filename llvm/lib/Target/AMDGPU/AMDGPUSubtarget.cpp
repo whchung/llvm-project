@@ -718,7 +718,7 @@ void GCNSubtarget::overrideSchedPolicy(MachineSchedPolicy &Policy,
 
   // Enabling both top down and bottom up scheduling seems to give us less
   // register spills than just using one of these approaches on its own.
-  Policy.OnlyTopDown = false;
+  Policy.OnlyTopDown = true;
   Policy.OnlyBottomUp = false;
 
   // Enabling ShouldTrackLaneMasks crashes the SI Machine Scheduler.
