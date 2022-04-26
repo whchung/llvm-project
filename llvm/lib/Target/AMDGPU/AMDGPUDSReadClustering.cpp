@@ -28,12 +28,13 @@ public:
       : BaseMemOpClusterMutation(tii, tri, true) {}
 
   void collectMemOpRecords(std::vector<SUnit> &SUnits,
-                           SmallVectorImpl<MemOpInfo> &MemOpRecords) override;
+                           SmallVectorImpl<MemOpInfo> &MemOpRecords, ScheduleDAGInstrs *DAG) override;
 };
 
 // Logic mostly copied from BaseMemOpClusterMutation::collectMemOpRecords.
 void DSReadClustering::collectMemOpRecords(
-    std::vector<SUnit> &SUnits, SmallVectorImpl<MemOpInfo> &MemOpRecords) {
+    std::vector<SUnit> &SUnits, SmallVectorImpl<MemOpInfo> &MemOpRecords, ScheduleDAGInstrs *DAG) {
+  llvm::errs() << "DSReadClustering::collectMemOpRecords IN\n";
   for (auto &SU : SUnits) {
     if ((IsLoad && !SU.getInstr()->mayLoad()) ||
         (!IsLoad && !SU.getInstr()->mayStore()))
@@ -43,6 +44,8 @@ void DSReadClustering::collectMemOpRecords(
     const MachineInstr &MI = *SU.getInstr();
     if (!SIInstrInfo::isDS(MI))
       continue;
+
+    DAG->dumpNodeAll(SU);
 
     SmallVector<const MachineOperand *, 4> BaseOps;
     int64_t Offset;

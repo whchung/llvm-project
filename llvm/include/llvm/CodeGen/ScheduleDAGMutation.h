@@ -83,7 +83,8 @@ protected:
   void clusterNeighboringMemOps(ArrayRef<MemOpInfo> MemOps, bool FastCluster,
                                 ScheduleDAGInstrs *DAG);
   virtual void collectMemOpRecords(std::vector<SUnit> &SUnits,
-                                   SmallVectorImpl<MemOpInfo> &MemOpRecords);
+                                   SmallVectorImpl<MemOpInfo> &MemOpRecords,
+                                   ScheduleDAGInstrs *DAG);
   bool groupMemOps(ArrayRef<MemOpInfo> MemOps, ScheduleDAGInstrs *DAG,
                    DenseMap<unsigned, SmallVector<MemOpInfo, 32>> &Groups);
 };

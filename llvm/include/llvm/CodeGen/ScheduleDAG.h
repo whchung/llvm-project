@@ -606,7 +606,7 @@ class TargetRegisterInfo;
     unsigned VerifyScheduledDAG(bool isBottomUp);
 #endif
 
-  protected:
+  public:
     void dumpNodeAll(const SUnit &SU) const;
 
   private:

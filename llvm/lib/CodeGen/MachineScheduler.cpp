@@ -1630,7 +1630,7 @@ void BaseMemOpClusterMutation::clusterNeighboringMemOps(
 }
 
 void BaseMemOpClusterMutation::collectMemOpRecords(
-    std::vector<SUnit> &SUnits, SmallVectorImpl<MemOpInfo> &MemOpRecords) {
+    std::vector<SUnit> &SUnits, SmallVectorImpl<MemOpInfo> &MemOpRecords, ScheduleDAGInstrs *DAG) {
   for (auto &SU : SUnits) {
     if ((IsLoad && !SU.getInstr()->mayLoad()) ||
         (!IsLoad && !SU.getInstr()->mayStore()))
@@ -1690,7 +1690,7 @@ bool BaseMemOpClusterMutation::groupMemOps(
 void BaseMemOpClusterMutation::apply(ScheduleDAGInstrs *DAG) {
   // Collect all the clusterable loads/stores
   SmallVector<MemOpInfo, 32> MemOpRecords;
-  collectMemOpRecords(DAG->SUnits, MemOpRecords);
+  collectMemOpRecords(DAG->SUnits, MemOpRecords, DAG);
 
   if (MemOpRecords.size() < 2)
     return;
