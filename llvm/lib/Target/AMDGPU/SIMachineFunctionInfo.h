@@ -178,6 +178,8 @@ template <> struct MappingTraits<SIArgument> {
 };
 
 struct SIArgumentInfo {
+  Optional<SIArgument> KernelArg0;
+  Optional<SIArgument> KernelArg1;
   Optional<SIArgument> PrivateSegmentBuffer;
   Optional<SIArgument> DispatchPtr;
   Optional<SIArgument> QueuePtr;
@@ -395,6 +397,8 @@ private:
   unsigned NumSpilledVGPRs = 0;
 
   // Feature bits required for inputs passed in user SGPRs.
+  bool KernelArg0 : 1;
+  bool KernelArg1 : 1;
   bool PrivateSegmentBuffer : 1;
   bool DispatchPtr : 1;
   bool QueuePtr : 1;
@@ -573,6 +577,8 @@ public:
   }
 
   // Add user SGPRs.
+  Register addKernelArg0(const SIRegisterInfo &TRI);
+  Register addKernelArg1(const SIRegisterInfo &TRI);
   Register addPrivateSegmentBuffer(const SIRegisterInfo &TRI);
   Register addDispatchPtr(const SIRegisterInfo &TRI);
   Register addQueuePtr(const SIRegisterInfo &TRI);
