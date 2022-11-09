@@ -1836,6 +1836,7 @@ SDValue SITargetLowering::lowerKernargMemParameter(
     return DAG.getMergeValues({ ArgVal, Load.getValue(1) }, SL);
   }
 
+
   SDValue Ptr = lowerKernArgParameterPtr(DAG, SL, Chain, Offset);
   SDValue Load = DAG.getLoad(MemVT, SL, Chain, Ptr, PtrInfo, Alignment,
                              MachineMemOperand::MODereferenceable |
@@ -2175,9 +2176,17 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   // FIXME: How should these inputs interact with inreg / custom SGPR inputs?
   if (Info.hasPrivateSegmentBuffer()) {
-    Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
-    MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_128RegClass);
-    CCInfo.AllocateReg(PrivateSegmentBufferReg);
+    //Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
+    //MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_128RegClass);
+    //CCInfo.AllocateReg(PrivateSegmentBufferReg);
+
+    Register KernelArg0Reg = Info.addKernelArg0(TRI);
+    MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
+    CCInfo.AllocateReg(KernelArg0Reg);
+
+    Register KernelArg1Reg = Info.addKernelArg1(TRI);
+    MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
+    CCInfo.AllocateReg(KernelArg1Reg);
   }
 
   if (Info.hasDispatchPtr()) {
@@ -2444,6 +2453,8 @@ void SITargetLowering::insertCopiesSplitCSR(
   }
 }
 
+static int counter = 0;
+
 SDValue SITargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &DL,
@@ -2585,20 +2596,42 @@ SDValue SITargetLowering::LowerFormalArguments(
         continue;
       }
 
-      SDValue Arg = lowerKernargMemParameter(
-        DAG, VT, MemVT, DL, Chain, Offset, Alignment, Ins[i].Flags.isSExt(), &Ins[i]);
-      Chains.push_back(Arg.getValue(1));
+      SDValue Arg;
+      if (counter < 2) {
+        //Arg = lowerKernArgParameterPtr(DAG, DL, Chain, counter * 4);
 
-      auto *ParamTy =
-        dyn_cast<PointerType>(FType->getParamType(Ins[i].getOrigArgIndex()));
-      if (Subtarget->getGeneration() == AMDGPUSubtarget::SOUTHERN_ISLANDS &&
-          ParamTy && (ParamTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS ||
-                      ParamTy->getAddressSpace() == AMDGPUAS::REGION_ADDRESS)) {
-        // On SI local pointers are just offsets into LDS, so they are always
-        // less than 16-bits.  On CI and newer they could potentially be
-        // real pointers, so we can't guarantee their size.
-        Arg = DAG.getNode(ISD::AssertZext, DL, Arg.getValueType(), Arg,
-                          DAG.getValueType(MVT::i16));
+        MachineFunction &MF = DAG.getMachineFunction();
+        const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
+
+        const ArgDescriptor *InputPtrReg;
+        const TargetRegisterClass *RC;
+        LLT ArgTy;
+        MVT PtrVT = getPointerTy(DAG.getDataLayout(), AMDGPUAS::CONSTANT_ADDRESS);
+
+        auto PreloadedValue = (counter == 0) ? AMDGPUFunctionArgInfo::KERNELARG0 : AMDGPUFunctionArgInfo::KERNELARG1;
+        std::tie(InputPtrReg, RC, ArgTy) = Info->getPreloadedValue(PreloadedValue);
+
+        MachineRegisterInfo &MRI = DAG.getMachineFunction().getRegInfo();
+        Register Reg = MRI.getLiveInVirtReg(InputPtrReg->getRegister());
+        Arg = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
+
+        ++counter;
+      } else {
+        Arg = lowerKernargMemParameter(
+          DAG, VT, MemVT, DL, Chain, Offset, Alignment, Ins[i].Flags.isSExt(), &Ins[i]);
+        Chains.push_back(Arg.getValue(1));
+
+        auto *ParamTy =
+          dyn_cast<PointerType>(FType->getParamType(Ins[i].getOrigArgIndex()));
+        if (Subtarget->getGeneration() == AMDGPUSubtarget::SOUTHERN_ISLANDS &&
+            ParamTy && (ParamTy->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS ||
+                        ParamTy->getAddressSpace() == AMDGPUAS::REGION_ADDRESS)) {
+          // On SI local pointers are just offsets into LDS, so they are always
+          // less than 16-bits.  On CI and newer they could potentially be
+          // real pointers, so we can't guarantee their size.
+          Arg = DAG.getNode(ISD::AssertZext, DL, Arg.getValueType(), Arg,
+                            DAG.getValueType(MVT::i16));
+        }
       }
 
       InVals.push_back(Arg);

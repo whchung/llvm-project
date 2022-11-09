@@ -220,6 +220,24 @@ void SIMachineFunctionInfo::limitOccupancy(const MachineFunction &MF) {
                  MF.getFunction()));
 }
 
+Register SIMachineFunctionInfo::addKernelArg0(
+  const SIRegisterInfo &TRI) {
+  ArgInfo.KernelArg0 =
+    ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
+    getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
+  NumUserSGPRs += 2;
+  return ArgInfo.KernelArg0.getRegister();
+}
+
+Register SIMachineFunctionInfo::addKernelArg1(
+  const SIRegisterInfo &TRI) {
+  ArgInfo.KernelArg1 =
+    ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
+    getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
+  NumUserSGPRs += 2;
+  return ArgInfo.KernelArg1.getRegister();
+}
+
 Register SIMachineFunctionInfo::addPrivateSegmentBuffer(
   const SIRegisterInfo &TRI) {
   ArgInfo.PrivateSegmentBuffer =
