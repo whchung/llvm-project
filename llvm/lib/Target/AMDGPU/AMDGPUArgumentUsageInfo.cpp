@@ -103,6 +103,10 @@ AMDGPUFunctionArgInfo::getPreloadedValue(
     return std::make_tuple(KernelArg1 ? &KernelArg1 : nullptr,
                            &AMDGPU::SGPR_64RegClass,
                            LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
+  case AMDGPUFunctionArgInfo::KERNELARG2:
+    return std::make_tuple(KernelArg2 ? &KernelArg2 : nullptr,
+                           &AMDGPU::SGPR_64RegClass,
+                           LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
   case AMDGPUFunctionArgInfo::IMPLICIT_BUFFER_PTR:
     return std::tuple(ImplicitBufferPtr ? &ImplicitBufferPtr : nullptr,
                       &AMDGPU::SGPR_64RegClass,

@@ -2176,17 +2176,21 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   // FIXME: How should these inputs interact with inreg / custom SGPR inputs?
   if (Info.hasPrivateSegmentBuffer()) {
-    Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
-    MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_192RegClass);
-    CCInfo.AllocateReg(PrivateSegmentBufferReg);
+    //Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
+    //MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_192RegClass);
+    //CCInfo.AllocateReg(PrivateSegmentBufferReg);
 
-    //Register KernelArg0Reg = Info.addKernelArg0(TRI);
-    //MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
-    //CCInfo.AllocateReg(KernelArg0Reg);
+    Register KernelArg0Reg = Info.addKernelArg0(TRI);
+    MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
+    CCInfo.AllocateReg(KernelArg0Reg);
 
-    //Register KernelArg1Reg = Info.addKernelArg1(TRI);
-    //MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
-    //CCInfo.AllocateReg(KernelArg1Reg);
+    Register KernelArg1Reg = Info.addKernelArg1(TRI);
+    MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
+    CCInfo.AllocateReg(KernelArg1Reg);
+
+    Register KernelArg2Reg = Info.addKernelArg2(TRI);
+    MF.addLiveIn(KernelArg2Reg, &AMDGPU::SGPR_64RegClass);
+    CCInfo.AllocateReg(KernelArg2Reg);
   }
 
   if (Info.hasDispatchPtr()) {
@@ -2597,9 +2601,7 @@ SDValue SITargetLowering::LowerFormalArguments(
       }
 
       SDValue Arg;
-      if (counter < 0) {
-        //Arg = lowerKernArgParameterPtr(DAG, DL, Chain, counter * 4);
-
+      if (counter < 3) {
         MachineFunction &MF = DAG.getMachineFunction();
         const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
 
@@ -2608,7 +2610,13 @@ SDValue SITargetLowering::LowerFormalArguments(
         LLT ArgTy;
         MVT PtrVT = getPointerTy(DAG.getDataLayout(), AMDGPUAS::CONSTANT_ADDRESS);
 
-        auto PreloadedValue = (counter == 0) ? AMDGPUFunctionArgInfo::KERNELARG0 : AMDGPUFunctionArgInfo::KERNELARG1;
+        AMDGPUFunctionArgInfo::PreloadedValue PreloadedValue;
+        switch (counter) {
+          case 0: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG0; break;
+          case 1: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG1; break;
+          case 2: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG2; break;
+          default: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG0; break;
+				}
         std::tie(InputPtrReg, RC, ArgTy) = Info->getPreloadedValue(PreloadedValue);
 
         MachineRegisterInfo &MRI = DAG.getMachineFunction().getRegInfo();

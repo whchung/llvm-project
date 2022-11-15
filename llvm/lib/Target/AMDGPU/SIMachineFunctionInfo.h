@@ -157,6 +157,7 @@ template <> struct MappingTraits<SIArgument> {
 struct SIArgumentInfo {
   std::optional<SIArgument> KernelArg0;
   std::optional<SIArgument> KernelArg1;
+  std::optional<SIArgument> KernelArg2;
   std::optional<SIArgument> PrivateSegmentBuffer;
   std::optional<SIArgument> DispatchPtr;
   std::optional<SIArgument> QueuePtr;
@@ -687,6 +688,7 @@ public:
   // Add user SGPRs.
   Register addKernelArg0(const SIRegisterInfo &TRI);
   Register addKernelArg1(const SIRegisterInfo &TRI);
+  Register addKernelArg2(const SIRegisterInfo &TRI);
   Register addPrivateSegmentBuffer(const SIRegisterInfo &TRI);
   Register addDispatchPtr(const SIRegisterInfo &TRI);
   Register addQueuePtr(const SIRegisterInfo &TRI);
