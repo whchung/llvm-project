@@ -2176,9 +2176,9 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   // FIXME: How should these inputs interact with inreg / custom SGPR inputs?
   if (Info.hasPrivateSegmentBuffer()) {
-    //Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
-    //MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_192RegClass);
-    //CCInfo.AllocateReg(PrivateSegmentBufferReg);
+    Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
+    MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_128RegClass);
+    CCInfo.AllocateReg(PrivateSegmentBufferReg);
 
     Register KernelArg0Reg = Info.addKernelArg0(TRI);
     MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
