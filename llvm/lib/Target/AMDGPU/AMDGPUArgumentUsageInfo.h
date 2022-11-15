@@ -106,6 +106,7 @@ struct AMDGPUFunctionArgInfo {
     LDS_KERNEL_ID       =  6, // LLVM internal, not part of the ABI
     KERNELARG0          = 7,
     KERNELARG1          = 8,
+    KERNELARG2          = 9,
     WORKGROUP_ID_X      = 10,
     WORKGROUP_ID_Y      = 11,
     WORKGROUP_ID_Z      = 12,
@@ -126,6 +127,7 @@ struct AMDGPUFunctionArgInfo {
   // XXX - Can these require argument spills?
   ArgDescriptor KernelArg0;
   ArgDescriptor KernelArg1;
+  ArgDescriptor KernelArg2;
   ArgDescriptor PrivateSegmentBuffer;
   ArgDescriptor DispatchPtr;
   ArgDescriptor QueuePtr;
