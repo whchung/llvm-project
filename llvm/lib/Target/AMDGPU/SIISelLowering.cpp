@@ -2176,17 +2176,17 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   // FIXME: How should these inputs interact with inreg / custom SGPR inputs?
   if (Info.hasPrivateSegmentBuffer()) {
-    //Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
-    //MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_128RegClass);
-    //CCInfo.AllocateReg(PrivateSegmentBufferReg);
+    Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
+    MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_192RegClass);
+    CCInfo.AllocateReg(PrivateSegmentBufferReg);
 
-    Register KernelArg0Reg = Info.addKernelArg0(TRI);
-    MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
-    CCInfo.AllocateReg(KernelArg0Reg);
+    //Register KernelArg0Reg = Info.addKernelArg0(TRI);
+    //MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
+    //CCInfo.AllocateReg(KernelArg0Reg);
 
-    Register KernelArg1Reg = Info.addKernelArg1(TRI);
-    MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
-    CCInfo.AllocateReg(KernelArg1Reg);
+    //Register KernelArg1Reg = Info.addKernelArg1(TRI);
+    //MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
+    //CCInfo.AllocateReg(KernelArg1Reg);
   }
 
   if (Info.hasDispatchPtr()) {
@@ -2597,7 +2597,7 @@ SDValue SITargetLowering::LowerFormalArguments(
       }
 
       SDValue Arg;
-      if (counter < 2) {
+      if (counter < 0) {
         //Arg = lowerKernArgParameterPtr(DAG, DL, Chain, counter * 4);
 
         MachineFunction &MF = DAG.getMachineFunction();
