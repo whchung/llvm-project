@@ -2179,7 +2179,10 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
     Register PrivateSegmentBufferReg = Info.addPrivateSegmentBuffer(TRI);
     MF.addLiveIn(PrivateSegmentBufferReg, &AMDGPU::SGPR_128RegClass);
     CCInfo.AllocateReg(PrivateSegmentBufferReg);
+  }
 
+  // HACK HACK HACK
+  if (true) {
     Register KernelArg0Reg = Info.addKernelArg0(TRI);
     MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
     CCInfo.AllocateReg(KernelArg0Reg);
@@ -2616,7 +2619,7 @@ SDValue SITargetLowering::LowerFormalArguments(
           case 1: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG1; break;
           case 2: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG2; break;
           default: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG0; break;
-				}
+        }
         std::tie(InputPtrReg, RC, ArgTy) = Info->getPreloadedValue(PreloadedValue);
 
         MachineRegisterInfo &MRI = DAG.getMachineFunction().getRegInfo();
@@ -2707,6 +2710,7 @@ SDValue SITargetLowering::LowerFormalArguments(
 
     InVals.push_back(Val);
   }
+  counter = 0;
 
   // Start adding system SGPRs.
   if (IsEntryFunc) {
