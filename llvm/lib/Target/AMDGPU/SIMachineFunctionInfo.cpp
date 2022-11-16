@@ -226,6 +226,7 @@ Register SIMachineFunctionInfo::addKernelArg0(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg0.getRegister();
 }
 
@@ -235,6 +236,7 @@ Register SIMachineFunctionInfo::addKernelArg1(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg1.getRegister();
 }
 
@@ -244,6 +246,7 @@ Register SIMachineFunctionInfo::addKernelArg2(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg2.getRegister();
 }
 
@@ -253,6 +256,7 @@ Register SIMachineFunctionInfo::addPrivateSegmentBuffer(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_128RegClass));
   NumUserSGPRs += 4;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.PrivateSegmentBuffer.getRegister();
 }
 
@@ -260,6 +264,7 @@ Register SIMachineFunctionInfo::addDispatchPtr(const SIRegisterInfo &TRI) {
   ArgInfo.DispatchPtr = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.DispatchPtr.getRegister();
 }
 
@@ -267,6 +272,7 @@ Register SIMachineFunctionInfo::addQueuePtr(const SIRegisterInfo &TRI) {
   ArgInfo.QueuePtr = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.QueuePtr.getRegister();
 }
 
@@ -275,6 +281,7 @@ Register SIMachineFunctionInfo::addKernargSegmentPtr(const SIRegisterInfo &TRI) 
     = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernargSegmentPtr.getRegister();
 }
 
@@ -282,6 +289,7 @@ Register SIMachineFunctionInfo::addDispatchID(const SIRegisterInfo &TRI) {
   ArgInfo.DispatchID = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.DispatchID.getRegister();
 }
 
@@ -289,6 +297,7 @@ Register SIMachineFunctionInfo::addFlatScratchInit(const SIRegisterInfo &TRI) {
   ArgInfo.FlatScratchInit = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.FlatScratchInit.getRegister();
 }
 
@@ -296,12 +305,14 @@ Register SIMachineFunctionInfo::addImplicitBufferPtr(const SIRegisterInfo &TRI) 
   ArgInfo.ImplicitBufferPtr = ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SReg_64RegClass));
   NumUserSGPRs += 2;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.ImplicitBufferPtr.getRegister();
 }
 
 Register SIMachineFunctionInfo::addLDSKernelId() {
   ArgInfo.LDSKernelId = ArgDescriptor::createRegister(getNextUserSGPR());
   NumUserSGPRs += 1;
+  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.LDSKernelId.getRegister();
 }
 
