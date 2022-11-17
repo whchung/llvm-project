@@ -10,6 +10,9 @@
 #ifndef __IMMINTRIN_H
 #define __IMMINTRIN_H
 
+// HACK HACK HACK
+#if 0
+
 #if !defined(__i386__) && !defined(__x86_64__)
 #error "This header is only meant to be used on x86 and x64 architecture"
 #endif
@@ -734,5 +737,8 @@ _InterlockedCompareExchange64_HLERelease(__int64 volatile *_Destination,
 #undef __DEFAULT_FN_ATTRS
 
 #endif /* defined(_MSC_VER) && __has_extension(gnu_asm) */
+
+// HACK HACK HACK
+#endif
 
 #endif /* __IMMINTRIN_H */
