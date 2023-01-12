@@ -12248,6 +12248,11 @@ terminated by an ``.end_amdhsa_kernel`` directive.
      ``.amdhsa_user_sgpr_count``                              0                   GFX6-GFX10   Controls USER_SGPR_COUNT in COMPUTE_PGM_RSRC2
                                                                                                :ref:`amdgpu-amdhsa-compute_pgm_rsrc2-gfx6-gfx10-table`
      ``.amdhsa_user_sgpr_private_segment_buffer``             0                   GFX6-GFX10   Controls ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER in
+                                                                                  (except      :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.
+                                                                                  GFX940)
+     ``.amdhsa_user_sgpr_kernarg_preload_count``              0                   GFX10        TBD TBD TBD in
+                                                                                               :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.    
+     ``.amdhsa_user_sgpr_dispatch_ptr``                       0                   GFX6-GFX11   Controls ENABLE_SGPR_DISPATCH_PTR in
                                                                                                :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.
      ``.amdhsa_user_sgpr_dispatch_ptr``                       0                   GFX6-GFX10   Controls ENABLE_SGPR_DISPATCH_PTR in
                                                                                                :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.
