@@ -348,6 +348,8 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
         OS, ".amdhsa_user_sgpr_private_segment_buffer", KD,
         kernel_code_properties,
         amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER);
+  // HACK introduce amdhsa_user_sgpr_kernarg_preload_count field
+  OS << "\t\t.amdhsa_user_sgpr_kernarg_preload_count " << 6 << '\n';
   PRINT_FIELD(OS, ".amdhsa_user_sgpr_dispatch_ptr", KD,
               kernel_code_properties,
               amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_PTR);
