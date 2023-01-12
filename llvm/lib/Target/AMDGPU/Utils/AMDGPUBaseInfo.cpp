@@ -1194,6 +1194,9 @@ amdhsa::kernel_descriptor_t getDefaultAmdhsaKernelDescriptor(
                     amdhsa::COMPUTE_PGM_RSRC3_GFX90A_TG_SPLIT,
                     STI->getFeatureBits().test(FeatureTgSplit) ? 1 : 0);
   }
+
+  KD.kernarg_preload_count = 6;
+
   return KD;
 }
 

@@ -1803,6 +1803,7 @@ AMDGPUDisassembler::decodeKernelDescriptorDirective(
              << ((TwoByteBuffer & MASK) >> (MASK##_SHIFT)) << '\n';            \
   } while (0)
 
+  uint8_t ByteBuffer = 0;
   uint16_t TwoByteBuffer = 0;
   uint32_t FourByteBuffer = 0;
 
@@ -1927,9 +1928,23 @@ AMDGPUDisassembler::decodeKernelDescriptorDirective(
     return MCDisassembler::Success;
 
   case amdhsa::RESERVED2_OFFSET:
-    // 6 bytes from here are reserved, must be 0.
-    ReservedBytes = DE.getBytes(Cursor, 6);
-    for (int I = 0; I < 6; ++I) {
+    // 1 byte from here is reserved, must be 0.
+    ReservedBytes = DE.getBytes(Cursor, 1);
+    if (ReservedBytes[0] != 0) {
+      return MCDisassembler::Fail;
+    }
+    return MCDisassembler::Success;
+
+  case amdhsa::KERNARG_PRELOAD_COUNT_OFFSET:
+    ByteBuffer = DE.getU8(Cursor);
+    KdStream << Indent << ".amdhsa_user_sgpr_kernarg_preload_count " << ByteBuffer
+             << '\n';
+    return MCDisassembler::Success;
+
+  case amdhsa::RESERVED3_OFFSET:
+    // 4 bytes from here are reserved, must be 0.
+    ReservedBytes = DE.getBytes(Cursor, 4);
+    for (int I = 0; I < 4; ++I) {
       if (ReservedBytes[I] != 0)
         return MCDisassembler::Fail;
     }
