@@ -416,6 +416,7 @@ class SIMachineFunctionInfo final : public AMDGPUMachineFunction {
 private:
   unsigned NumUserSGPRs = 0;
   unsigned NumSystemSGPRs = 0;
+  unsigned NumKernargPreloadedSGPRs = 0;
 
   bool HasSpilledSGPRs = false;
   bool HasSpilledVGPRs = false;
@@ -426,8 +427,6 @@ private:
   unsigned NumSpilledVGPRs = 0;
 
   // Feature bits required for inputs passed in user SGPRs.
-  bool KernelArg0 : 1;
-  bool KernelArg1 : 1;
   bool PrivateSegmentBuffer : 1;
   bool DispatchPtr : 1;
   bool QueuePtr : 1;
@@ -868,6 +867,10 @@ public:
 
   unsigned getNumPreloadedSGPRs() const {
     return NumUserSGPRs + NumSystemSGPRs;
+  }
+
+  unsigned getNumKernargPreloadedSGPRs() const {
+    return NumKernargPreloadedSGPRs;
   }
 
   Register getPrivateSegmentWaveByteOffsetSystemSGPR() const {

@@ -230,6 +230,7 @@ Register SIMachineFunctionInfo::addKernelArg0(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  NumKernargPreloadedSGPRs += 2;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg0.getRegister();
 }
@@ -240,6 +241,7 @@ Register SIMachineFunctionInfo::addKernelArg1(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  NumKernargPreloadedSGPRs += 2;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg1.getRegister();
 }
@@ -250,6 +252,7 @@ Register SIMachineFunctionInfo::addKernelArg2(
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
     getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
   NumUserSGPRs += 2;
+  NumKernargPreloadedSGPRs += 2;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg2.getRegister();
 }

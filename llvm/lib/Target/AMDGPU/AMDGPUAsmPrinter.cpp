@@ -435,6 +435,7 @@ amdhsa::kernel_descriptor_t AMDGPUAsmPrinter::getAmdhsaKernelDescriptor(
     const SIProgramInfo &PI) const {
   const GCNSubtarget &STM = MF.getSubtarget<GCNSubtarget>();
   const Function &F = MF.getFunction();
+  const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
 
   amdhsa::kernel_descriptor_t KernelDescriptor;
   memset(&KernelDescriptor, 0x0, sizeof(KernelDescriptor));
@@ -458,7 +459,7 @@ amdhsa::kernel_descriptor_t AMDGPUAsmPrinter::getAmdhsaKernelDescriptor(
     KernelDescriptor.compute_pgm_rsrc3 =
       CurrentProgramInfo.ComputePGMRSrc3GFX90A;
 
-  KernelDescriptor.kernarg_preload_count = 6;
+  KernelDescriptor.kernarg_preload_count = Info->getNumKernargPreloadedSGPRs();
 
   return KernelDescriptor;
 }
