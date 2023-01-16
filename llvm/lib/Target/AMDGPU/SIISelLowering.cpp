@@ -48,6 +48,11 @@ using namespace llvm;
 
 STATISTIC(NumTailCalls, "Number of tail calls");
 
+static cl::opt<unsigned> KernargPreloadCount(
+  "amdgpu-kernarg-preload-count",
+  cl::desc("How many kernel arguments be preloaded onto SGPRs"),
+  cl::init(0));
+
 static cl::opt<bool> DisableLoopAlignment(
   "amdgpu-disable-loop-alignment",
   cl::desc("Do not align and prefetch loops"),
@@ -2182,15 +2187,21 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
   }
 
   // HACK HACK HACK
-  if (true) {
+  if (KernargPreloadCount > 0) {
     Register KernelArg0Reg = Info.addKernelArg0(TRI);
     MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
     CCInfo.AllocateReg(KernelArg0Reg);
+  }
 
+  // HACK HACK HACK
+  if (KernargPreloadCount > 1) {
     Register KernelArg1Reg = Info.addKernelArg1(TRI);
     MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
     CCInfo.AllocateReg(KernelArg1Reg);
+  }
 
+  // HACK HACK HACK
+  if (KernargPreloadCount > 2) {
     Register KernelArg2Reg = Info.addKernelArg2(TRI);
     MF.addLiveIn(KernelArg2Reg, &AMDGPU::SGPR_64RegClass);
     CCInfo.AllocateReg(KernelArg2Reg);
@@ -2460,7 +2471,7 @@ void SITargetLowering::insertCopiesSplitCSR(
   }
 }
 
-static int counter = 0;
+static unsigned counter = 0;
 
 SDValue SITargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
@@ -2604,7 +2615,7 @@ SDValue SITargetLowering::LowerFormalArguments(
       }
 
       SDValue Arg;
-      if (counter < 3) {
+      if (counter < KernargPreloadCount) {
         MachineFunction &MF = DAG.getMachineFunction();
         const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
 
