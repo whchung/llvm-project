@@ -178,9 +178,9 @@ struct kernel_descriptor_t {
   uint32_t compute_pgm_rsrc1;
   uint32_t compute_pgm_rsrc2;
   uint16_t kernel_code_properties;
-  uint8_t reserved2;
-  uint8_t kernarg_preload_count;
-  uint8_t reserved3[4];
+  uint16_t reserved2;
+  uint32_t kernarg_preload_count;
+  //uint8_t reserved3[4];
 };
 
 enum : uint32_t {
@@ -195,8 +195,8 @@ enum : uint32_t {
   COMPUTE_PGM_RSRC2_OFFSET = 52,
   KERNEL_CODE_PROPERTIES_OFFSET = 56,
   RESERVED2_OFFSET = 58,
-  KERNARG_PRELOAD_COUNT_OFFSET = 59,
-  RESERVED3_OFFSET = 60
+  KERNARG_PRELOAD_COUNT_OFFSET = 60,
+  //RESERVED3_OFFSET = 60
 };
 
 static_assert(
@@ -234,8 +234,8 @@ static_assert(offsetof(kernel_descriptor_t, reserved2) == RESERVED2_OFFSET,
               "invalid offset for reserved2");
 static_assert(offsetof(kernel_descriptor_t, kernarg_preload_count) == KERNARG_PRELOAD_COUNT_OFFSET,
               "invalid offset for kernarg_preload_count");
-static_assert(offsetof(kernel_descriptor_t, reserved3) == RESERVED3_OFFSET,
-              "invalid offset for reserved3");
+//static_assert(offsetof(kernel_descriptor_t, reserved3) == RESERVED3_OFFSET,
+//              "invalid offset for reserved3");
 
 } // end namespace amdhsa
 } // end namespace llvm
