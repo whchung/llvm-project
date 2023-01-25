@@ -915,9 +915,6 @@ msgpack::MapDocNode MetadataStreamerMsgPackV3::getHSAKernelProps(
   Kern[".vgpr_spill_count"] =
       Kern.getDocument()->getNode(MFI.getNumSpilledVGPRs());
 
-  llvm::errs() << "getHSAKernelProps: kernarg_preload_count = 99\n";
-  Kern[".kernarg_preload_count"] = Kern.getDocument()->getNode(99);
-
   return Kern;
 }
 

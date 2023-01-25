@@ -348,7 +348,6 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
         OS, ".amdhsa_user_sgpr_private_segment_buffer", KD,
         kernel_code_properties,
         amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER);
-  llvm::errs() << "AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor kernarg_preload_count " << static_cast<uint32_t>(KD.kernarg_preload_count) << "\n";
   OS << "\t\t.amdhsa_user_sgpr_kernarg_preload_count " << static_cast<uint32_t>(KD.kernarg_preload_count) << '\n';
   PRINT_FIELD(OS, ".amdhsa_user_sgpr_dispatch_ptr", KD,
               kernel_code_properties,
@@ -905,10 +904,7 @@ void AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor(
   Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc2);
   Streamer.emitInt16(KernelDescriptor.kernel_code_properties);
   Streamer.emitInt16(KernelDescriptor.reserved2);
-  llvm::errs() << "AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor KernelDescriptor.kernarg_preload_count " << static_cast<uint32_t>(KernelDescriptor.kernarg_preload_count) << "\n";
-  //llvm::errs() << "AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor KernelDescriptor.kernarg_preload_count " << 67 << "\n";
   Streamer.emitInt32(KernelDescriptor.kernarg_preload_count);
-  //Streamer.emitInt32(67);
   //for (uint8_t Res : KernelDescriptor.reserved3)
   //  Streamer.emitInt8(Res);
 }
