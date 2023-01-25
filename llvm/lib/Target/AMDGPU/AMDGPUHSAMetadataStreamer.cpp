@@ -883,9 +883,6 @@ MetadataStreamerV3::getHSAKernelProps(const MachineFunction &MF,
   Kern[".vgpr_spill_count"] =
       Kern.getDocument()->getNode(MFI.getNumSpilledVGPRs());
 
-  llvm::errs() << "getHSAKernelProps: kernarg_preload_count = 99\n";
-  Kern[".kernarg_preload_count"] = Kern.getDocument()->getNode(99);
-
   return Kern;
 }
 
