@@ -135,9 +135,6 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     // HACK HACK HACK
     //if (!F.hasFnAttribute("amdgpu-no-dispatch-id"))
     //  DispatchID = true;
-
-    if (!IsKernel && !F.hasFnAttribute("amdgpu-no-lds-kernel-id"))
-      LDSKernelId = true;
   }
 
   // FIXME: This attribute is a hack, we just need an analysis on the function
@@ -286,13 +283,6 @@ Register SIMachineFunctionInfo::addImplicitBufferPtr(const SIRegisterInfo &TRI) 
   NumUserSGPRs += 2;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.ImplicitBufferPtr.getRegister();
-}
-
-Register SIMachineFunctionInfo::addLDSKernelId() {
-  ArgInfo.LDSKernelId = ArgDescriptor::createRegister(getNextUserSGPR());
-  NumUserSGPRs += 1;
-  llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
-  return ArgInfo.LDSKernelId.getRegister();
 }
 
 bool SIMachineFunctionInfo::isCalleeSavedReg(const MCPhysReg *CSRegs,
