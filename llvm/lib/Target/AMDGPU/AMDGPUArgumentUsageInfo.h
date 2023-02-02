@@ -104,6 +104,9 @@ struct AMDGPUFunctionArgInfo {
     DISPATCH_ID         =  4,
     FLAT_SCRATCH_INIT   =  5,
     LDS_KERNEL_ID       =  6, // LLVM internal, not part of the ABI
+
+    // TODO:
+    // - for preloaded kernarg, remove enum
     KERNELARG0          = 7,
     KERNELARG1          = 8,
     KERNELARG2          = 9,
@@ -125,6 +128,9 @@ struct AMDGPUFunctionArgInfo {
 
   // User SGPRs in kernels
   // XXX - Can these require argument spills?
+
+  // TODO:
+  // - for preloaded kernargs, use a vector
   ArgDescriptor KernelArg0;
   ArgDescriptor KernelArg1;
   ArgDescriptor KernelArg2;
@@ -159,6 +165,9 @@ struct AMDGPUFunctionArgInfo {
 
   std::tuple<const ArgDescriptor *, const TargetRegisterClass *, LLT>
   getPreloadedValue(PreloadedValue Value) const;
+
+  // TODO
+  // - fore preloaeded kernargs, create another utility function
 
   static constexpr AMDGPUFunctionArgInfo fixedABILayout();
 };
