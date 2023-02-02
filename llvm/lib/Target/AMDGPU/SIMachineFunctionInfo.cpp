@@ -132,17 +132,14 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
     if (!F.hasFnAttribute("amdgpu-no-queue-ptr"))
       QueuePtr = true;
 
-    // HACK HACK HACK
-    //if (!F.hasFnAttribute("amdgpu-no-dispatch-id"))
-    //  DispatchID = true;
+    if (!F.hasFnAttribute("amdgpu-no-dispatch-id"))
+      DispatchID = true;
   }
 
   // FIXME: This attribute is a hack, we just need an analysis on the function
   // to look for allocas.
   bool HasStackObjects = F.hasFnAttribute("amdgpu-stack-objects");
 
-  // HACK HACK HACK
-#if 0
   // TODO: This could be refined a lot. The attribute is a poor way of
   // detecting calls or stack objects that may require it before argument
   // lowering.
@@ -152,7 +149,6 @@ SIMachineFunctionInfo::SIMachineFunctionInfo(const MachineFunction &MF)
       !ST.flatScratchIsArchitected()) {
     FlatScratchInit = true;
   }
-#endif
 
   if (isEntryFunction()) {
     // X, XY, and XYZ are the only supported combinations, so make sure Y is
