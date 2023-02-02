@@ -2186,6 +2186,11 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
     CCInfo.AllocateReg(PrivateSegmentBufferReg);
   }
 
+  // TODO:
+  // - move the logic to the last
+  // - inspect the number of kernargs can be preloaded
+  // - be able to specify the width of kernarg by inspecting MF
+
   // HACK HACK HACK
   if (KernargPreloadCount > 0) {
     Register KernelArg0Reg = Info.addKernelArg0(TRI);
@@ -2623,6 +2628,9 @@ SDValue SITargetLowering::LowerFormalArguments(
         const TargetRegisterClass *RC;
         LLT ArgTy;
         MVT PtrVT = getPointerTy(DAG.getDataLayout(), AMDGPUAS::CONSTANT_ADDRESS);
+
+        // TODO:
+        // - perhaps add a new interface to get preloaded kernarg
 
         AMDGPUFunctionArgInfo::PreloadedValue PreloadedValue;
         switch (counter) {

@@ -90,6 +90,8 @@ std::tuple<const ArgDescriptor *, const TargetRegisterClass *, LLT>
 AMDGPUFunctionArgInfo::getPreloadedValue(
     AMDGPUFunctionArgInfo::PreloadedValue Value) const {
   switch (Value) {
+    // TODO:
+    // - for preloaded kernargs, use another data structure which keeps number and width
   case AMDGPUFunctionArgInfo::KERNELARG0:
     return std::tuple(KernelArg0 ? &KernelArg0 : nullptr,
                       &AMDGPU::SGPR_64RegClass,
