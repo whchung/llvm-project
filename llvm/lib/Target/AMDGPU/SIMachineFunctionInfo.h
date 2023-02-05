@@ -688,9 +688,9 @@ public:
 
   // TODO: change to a utility interface to specify the number and width
   // for preloaded kernargs
-  Register addKernelArg0(const SIRegisterInfo &TRI);
-  Register addKernelArg1(const SIRegisterInfo &TRI);
-  Register addKernelArg2(const SIRegisterInfo &TRI);
+  Register addKernelArg0(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
+  Register addKernelArg1(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
+  Register addKernelArg2(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
 
   Register addPrivateSegmentBuffer(const SIRegisterInfo &TRI);
   Register addDispatchPtr(const SIRegisterInfo &TRI);

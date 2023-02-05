@@ -2191,25 +2191,64 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
   // - inspect the number of kernargs can be preloaded
   // - be able to specify the width of kernarg by inspecting MF
 
-  // HACK HACK HACK
-  if (KernargPreloadCount > 0) {
-    Register KernelArg0Reg = Info.addKernelArg0(TRI);
-    MF.addLiveIn(KernelArg0Reg, &AMDGPU::SGPR_64RegClass);
-    CCInfo.AllocateReg(KernelArg0Reg);
-  }
 
-  // HACK HACK HACK
-  if (KernargPreloadCount > 1) {
-    Register KernelArg1Reg = Info.addKernelArg1(TRI);
-    MF.addLiveIn(KernelArg1Reg, &AMDGPU::SGPR_64RegClass);
-    CCInfo.AllocateReg(KernelArg1Reg);
-  }
+#if 0
+  llvm::errs() << "Info.getExplicitKernArgSize: " << Info.getExplicitKernArgSize() << "\n";
+  const AMDGPUSubtarget &ST = AMDGPUSubtarget::get(MF);
+  const Function &F = MF.getFunction();
+  Align MaxAlign = Info.getMaxKernArgAlign();
+  llvm::errs() << "#2 : " << ST.getExplicitKernArgSize(F, MaxAlign) << "\n";
+#endif
 
-  // HACK HACK HACK
-  if (KernargPreloadCount > 2) {
-    Register KernelArg2Reg = Info.addKernelArg2(TRI);
-    MF.addLiveIn(KernelArg2Reg, &AMDGPU::SGPR_64RegClass);
-    CCInfo.AllocateReg(KernelArg2Reg);
+  const Function &F = MF.getFunction();
+  const DataLayout &DL = F.getParent()->getDataLayout();
+  unsigned KernArgCounter = 0;
+  for (const Argument &Arg : F.args()) {
+    Type *ArgTy = Arg.getType();
+    uint64_t AllocSize = DL.getTypeAllocSize(ArgTy);
+    unsigned AllocSizeDWord = static_cast<unsigned>(AllocSize >> 2);
+#if 0
+    llvm::errs() << "Arg: " << Arg << " width: " << AllocSize << "\n";
+#endif
+
+    const TargetRegisterClass *RC = nullptr;
+    switch (AllocSizeDWord) {
+    case 1:
+      RC = &AMDGPU::SGPR_32RegClass;
+      break;
+    case 2:
+      RC = &AMDGPU::SGPR_64RegClass;
+      break;
+    case 4:
+      RC = &AMDGPU::SGPR_128RegClass;
+      break;
+    default:
+      llvm_unreachable("Unexpected kernel argument alloc size!");
+    }
+
+    // HACK HACK HACK
+    if (KernArgCounter == 0) {
+      Register KernArgReg = Info.addKernelArg0(TRI, RC, AllocSizeDWord);
+      MF.addLiveIn(KernArgReg, RC);
+      CCInfo.AllocateReg(KernArgReg);
+    }
+
+    // HACK HACK HACK
+    if (KernArgCounter == 1) {
+      Register KernArgReg = Info.addKernelArg1(TRI, RC, AllocSizeDWord);
+      MF.addLiveIn(KernArgReg, RC);
+      CCInfo.AllocateReg(KernArgReg);
+    }
+
+    // HACK HACK HACK
+    if (KernArgCounter == 2) {
+      Register KernArgReg = Info.addKernelArg2(TRI, RC, AllocSizeDWord);
+      MF.addLiveIn(KernArgReg, RC);
+      CCInfo.AllocateReg(KernArgReg);
+    }
+
+    if (++KernArgCounter >= KernargPreloadCount)
+      break;
   }
 
   if (Info.hasDispatchPtr()) {

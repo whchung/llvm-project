@@ -225,34 +225,34 @@ void SIMachineFunctionInfo::limitOccupancy(const MachineFunction &MF) {
 }
 
 Register SIMachineFunctionInfo::addKernelArg0(
-  const SIRegisterInfo &TRI) {
+  const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord) {
   ArgInfo.KernelArg0 =
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
-    getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
-  NumUserSGPRs += 2;
-  NumKernargPreloadedSGPRs += 2;
+    getNextUserSGPR(), AMDGPU::sub0, RC));
+  NumUserSGPRs += AllocSizeDWord;
+  NumKernargPreloadedSGPRs += AllocSizeDWord;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg0.getRegister();
 }
 
 Register SIMachineFunctionInfo::addKernelArg1(
-  const SIRegisterInfo &TRI) {
+  const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord) {
   ArgInfo.KernelArg1 =
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
-    getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
-  NumUserSGPRs += 2;
-  NumKernargPreloadedSGPRs += 2;
+    getNextUserSGPR(), AMDGPU::sub0, RC));
+  NumUserSGPRs += AllocSizeDWord;
+  NumKernargPreloadedSGPRs += AllocSizeDWord;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg1.getRegister();
 }
 
 Register SIMachineFunctionInfo::addKernelArg2(
-  const SIRegisterInfo &TRI) {
+  const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord) {
   ArgInfo.KernelArg2 =
     ArgDescriptor::createRegister(TRI.getMatchingSuperReg(
-    getNextUserSGPR(), AMDGPU::sub0, &AMDGPU::SGPR_64RegClass));
-  NumUserSGPRs += 2;
-  NumKernargPreloadedSGPRs += 2;
+    getNextUserSGPR(), AMDGPU::sub0, RC));
+  NumUserSGPRs += AllocSizeDWord;
+  NumKernargPreloadedSGPRs += AllocSizeDWord;
   llvm::errs() << __FUNCTION__ << ": " << NumUserSGPRs << "\n";
   return ArgInfo.KernelArg2.getRegister();
 }
