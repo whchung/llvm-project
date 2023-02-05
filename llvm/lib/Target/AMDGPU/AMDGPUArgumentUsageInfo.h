@@ -128,12 +128,6 @@ struct AMDGPUFunctionArgInfo {
 
   // User SGPRs in kernels
   // XXX - Can these require argument spills?
-
-  // TODO:
-  // - for preloaded kernargs, use a vector
-  ArgDescriptor KernelArg0;
-  ArgDescriptor KernelArg1;
-  ArgDescriptor KernelArg2;
   ArgDescriptor PrivateSegmentBuffer;
   ArgDescriptor DispatchPtr;
   ArgDescriptor QueuePtr;
@@ -162,6 +156,9 @@ struct AMDGPUFunctionArgInfo {
   ArgDescriptor WorkItemIDX;
   ArgDescriptor WorkItemIDY;
   ArgDescriptor WorkItemIDZ;
+
+  ArgDescriptor PreloadedKernArg[16];
+  unsigned PreloadedKernArgCount = 0;
 
   std::tuple<const ArgDescriptor *, const TargetRegisterClass *, LLT>
   getPreloadedValue(PreloadedValue Value) const;

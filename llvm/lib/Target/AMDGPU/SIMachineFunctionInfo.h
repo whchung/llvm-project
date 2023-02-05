@@ -615,13 +615,6 @@ public:
   }
 
   // Add user SGPRs.
-
-  // TODO: change to a utility interface to specify the number and width
-  // for preloaded kernargs
-  Register addKernelArg0(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
-  Register addKernelArg1(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
-  Register addKernelArg2(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
-
   Register addPrivateSegmentBuffer(const SIRegisterInfo &TRI);
   Register addDispatchPtr(const SIRegisterInfo &TRI);
   Register addQueuePtr(const SIRegisterInfo &TRI);
@@ -630,6 +623,8 @@ public:
   Register addFlatScratchInit(const SIRegisterInfo &TRI);
   Register addImplicitBufferPtr(const SIRegisterInfo &TRI);
   Register addLDSKernelId();
+
+  Register addPreloadedKernArg(const SIRegisterInfo &TRI, const TargetRegisterClass *RC, unsigned AllocSizeDWord);
 
   /// Increment user SGPRs used for padding the argument list only.
   Register addReservedUserSGPR() {
