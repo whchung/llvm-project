@@ -2189,27 +2189,15 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
   // TODO:
   // - move the logic to the last
   // - inspect the number of kernargs can be preloaded
-  // - be able to specify the width of kernarg by inspecting MF
-
-
-#if 0
-  llvm::errs() << "Info.getExplicitKernArgSize: " << Info.getExplicitKernArgSize() << "\n";
-  const AMDGPUSubtarget &ST = AMDGPUSubtarget::get(MF);
-  const Function &F = MF.getFunction();
-  Align MaxAlign = Info.getMaxKernArgAlign();
-  llvm::errs() << "#2 : " << ST.getExplicitKernArgSize(F, MaxAlign) << "\n";
-#endif
+  // (DONE) be able to specify the width of kernarg by inspecting MF
 
   const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
-  unsigned KernArgCounter = 0;
+  unsigned PreloadedKernArgCounter = 0;
   for (const Argument &Arg : F.args()) {
     Type *ArgTy = Arg.getType();
     uint64_t AllocSize = DL.getTypeAllocSize(ArgTy);
     unsigned AllocSizeDWord = static_cast<unsigned>(AllocSize >> 2);
-#if 0
-    llvm::errs() << "Arg: " << Arg << " width: " << AllocSize << "\n";
-#endif
 
     const TargetRegisterClass *RC = nullptr;
     switch (AllocSizeDWord) {
@@ -2226,28 +2214,13 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
       llvm_unreachable("Unexpected kernel argument alloc size!");
     }
 
-    // HACK HACK HACK
-    if (KernArgCounter == 0) {
-      Register KernArgReg = Info.addKernelArg0(TRI, RC, AllocSizeDWord);
-      MF.addLiveIn(KernArgReg, RC);
-      CCInfo.AllocateReg(KernArgReg);
+    if (PreloadedKernArgCounter < KernargPreloadCount) {
+      Register PreloadedKernArgReg = Info.addPreloadedKernArg(TRI, RC, AllocSizeDWord);
+      MF.addLiveIn(PreloadedKernArgReg, RC);
+      CCInfo.AllocateReg(PreloadedKernArgReg);
     }
 
-    // HACK HACK HACK
-    if (KernArgCounter == 1) {
-      Register KernArgReg = Info.addKernelArg1(TRI, RC, AllocSizeDWord);
-      MF.addLiveIn(KernArgReg, RC);
-      CCInfo.AllocateReg(KernArgReg);
-    }
-
-    // HACK HACK HACK
-    if (KernArgCounter == 2) {
-      Register KernArgReg = Info.addKernelArg2(TRI, RC, AllocSizeDWord);
-      MF.addLiveIn(KernArgReg, RC);
-      CCInfo.AllocateReg(KernArgReg);
-    }
-
-    if (++KernArgCounter >= KernargPreloadCount)
+    if (++PreloadedKernArgCounter >= KernargPreloadCount)
       break;
   }
 

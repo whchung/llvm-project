@@ -93,15 +93,15 @@ AMDGPUFunctionArgInfo::getPreloadedValue(
     // TODO:
     // - for preloaded kernargs, use another data structure which keeps number and width
   case AMDGPUFunctionArgInfo::KERNELARG0:
-    return std::tuple(KernelArg0 ? &KernelArg0 : nullptr,
+    return std::tuple(PreloadedKernArg[0] ? &PreloadedKernArg[0] : nullptr,
                       &AMDGPU::SGPR_64RegClass,
                       LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
   case AMDGPUFunctionArgInfo::KERNELARG1:
-    return std::tuple(KernelArg1 ? &KernelArg1 : nullptr,
+    return std::tuple(PreloadedKernArg[1] ? &PreloadedKernArg[1] : nullptr,
                       &AMDGPU::SGPR_64RegClass,
                       LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
   case AMDGPUFunctionArgInfo::KERNELARG2:
-    return std::tuple(KernelArg2 ? &KernelArg2 : nullptr,
+    return std::tuple(PreloadedKernArg[2] ? &PreloadedKernArg[2] : nullptr,
                       &AMDGPU::SGPR_64RegClass,
                       LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
   case AMDGPUFunctionArgInfo::PRIVATE_SEGMENT_BUFFER: {
