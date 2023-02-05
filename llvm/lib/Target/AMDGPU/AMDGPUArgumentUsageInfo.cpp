@@ -90,20 +90,6 @@ std::tuple<const ArgDescriptor *, const TargetRegisterClass *, LLT>
 AMDGPUFunctionArgInfo::getPreloadedValue(
     AMDGPUFunctionArgInfo::PreloadedValue Value) const {
   switch (Value) {
-    // TODO:
-    // - for preloaded kernargs, use another data structure which keeps number and width
-  case AMDGPUFunctionArgInfo::KERNELARG0:
-    return std::tuple(PreloadedKernArg[0] ? &PreloadedKernArg[0] : nullptr,
-                      &AMDGPU::SGPR_64RegClass,
-                      LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
-  case AMDGPUFunctionArgInfo::KERNELARG1:
-    return std::tuple(PreloadedKernArg[1] ? &PreloadedKernArg[1] : nullptr,
-                      &AMDGPU::SGPR_64RegClass,
-                      LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
-  case AMDGPUFunctionArgInfo::KERNELARG2:
-    return std::tuple(PreloadedKernArg[2] ? &PreloadedKernArg[2] : nullptr,
-                      &AMDGPU::SGPR_64RegClass,
-                      LLT::pointer(AMDGPUAS::CONSTANT_ADDRESS, 64));
   case AMDGPUFunctionArgInfo::PRIVATE_SEGMENT_BUFFER: {
     return std::tuple(PrivateSegmentBuffer ? &PrivateSegmentBuffer : nullptr,
                       &AMDGPU::SGPR_128RegClass, LLT::fixed_vector(4, 32));

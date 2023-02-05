@@ -104,12 +104,6 @@ struct AMDGPUFunctionArgInfo {
     DISPATCH_ID         =  4,
     FLAT_SCRATCH_INIT   =  5,
     LDS_KERNEL_ID       =  6, // LLVM internal, not part of the ABI
-
-    // TODO:
-    // - for preloaded kernarg, remove enum
-    KERNELARG0          = 7,
-    KERNELARG1          = 8,
-    KERNELARG2          = 9,
     WORKGROUP_ID_X      = 10,
     WORKGROUP_ID_Y      = 11,
     WORKGROUP_ID_Z      = 12,

@@ -1841,7 +1841,6 @@ SDValue SITargetLowering::lowerKernargMemParameter(
     return DAG.getMergeValues({ ArgVal, Load.getValue(1) }, SL);
   }
 
-
   SDValue Ptr = lowerKernArgParameterPtr(DAG, SL, Chain, Offset);
   SDValue Load = DAG.getLoad(MemVT, SL, Chain, Ptr, PtrInfo, Alignment,
                              MachineMemOperand::MODereferenceable |
@@ -2636,23 +2635,8 @@ SDValue SITargetLowering::LowerFormalArguments(
         MachineFunction &MF = DAG.getMachineFunction();
         const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
 
-        const ArgDescriptor *InputPtrReg;
-        const TargetRegisterClass *RC;
-        LLT ArgTy;
+        const ArgDescriptor *InputPtrReg = &(Info->getArgInfo().PreloadedKernArg[counter]);
         MVT PtrVT = getPointerTy(DAG.getDataLayout(), AMDGPUAS::CONSTANT_ADDRESS);
-
-        // TODO:
-        // - perhaps add a new interface to get preloaded kernarg
-
-        AMDGPUFunctionArgInfo::PreloadedValue PreloadedValue;
-        switch (counter) {
-          case 0: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG0; break;
-          case 1: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG1; break;
-          case 2: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG2; break;
-          default: PreloadedValue = AMDGPUFunctionArgInfo::KERNELARG0; break;
-        }
-        std::tie(InputPtrReg, RC, ArgTy) = Info->getPreloadedValue(PreloadedValue);
-
         MachineRegisterInfo &MRI = DAG.getMachineFunction().getRegInfo();
         Register Reg = MRI.getLiveInVirtReg(InputPtrReg->getRegister());
         Arg = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
