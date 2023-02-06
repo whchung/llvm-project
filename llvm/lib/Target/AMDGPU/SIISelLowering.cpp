@@ -51,7 +51,7 @@ STATISTIC(NumTailCalls, "Number of tail calls");
 static cl::opt<unsigned> KernargPreloadCount(
   "amdgpu-kernarg-preload-count",
   cl::desc("How many kernel arguments be preloaded onto SGPRs"),
-  cl::init(0));
+  cl::init(16));
 
 static cl::opt<bool> DisableLoopAlignment(
   "amdgpu-disable-loop-alignment",
@@ -2185,44 +2185,6 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
     CCInfo.AllocateReg(PrivateSegmentBufferReg);
   }
 
-  // TODO:
-  // - move the logic to the last
-  // - inspect the number of kernargs can be preloaded
-  // (DONE) be able to specify the width of kernarg by inspecting MF
-
-  const Function &F = MF.getFunction();
-  const DataLayout &DL = F.getParent()->getDataLayout();
-  unsigned PreloadedKernArgCounter = 0;
-  for (const Argument &Arg : F.args()) {
-    Type *ArgTy = Arg.getType();
-    uint64_t AllocSize = DL.getTypeAllocSize(ArgTy);
-    unsigned AllocSizeDWord = static_cast<unsigned>(AllocSize >> 2);
-
-    const TargetRegisterClass *RC = nullptr;
-    switch (AllocSizeDWord) {
-    case 1:
-      RC = &AMDGPU::SGPR_32RegClass;
-      break;
-    case 2:
-      RC = &AMDGPU::SGPR_64RegClass;
-      break;
-    case 4:
-      RC = &AMDGPU::SGPR_128RegClass;
-      break;
-    default:
-      llvm_unreachable("Unexpected kernel argument alloc size!");
-    }
-
-    if (PreloadedKernArgCounter < KernargPreloadCount) {
-      Register PreloadedKernArgReg = Info.addPreloadedKernArg(TRI, RC, AllocSizeDWord);
-      MF.addLiveIn(PreloadedKernArgReg, RC);
-      CCInfo.AllocateReg(PreloadedKernArgReg);
-    }
-
-    if (++PreloadedKernArgCounter >= KernargPreloadCount)
-      break;
-  }
-
   if (Info.hasDispatchPtr()) {
     Register DispatchPtrReg = Info.addDispatchPtr(TRI);
     MF.addLiveIn(DispatchPtrReg, &AMDGPU::SGPR_64RegClass);
@@ -2266,6 +2228,51 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   // TODO: Add GridWorkGroupCount user SGPRs when used. For now with HSA we read
   // these from the dispatch pointer.
+
+  llvm::errs() << "USER SGPRs used: " << Info.getNumUserSGPRs() << "\n";
+  llvm::errs() << "# of DWs available: " << (16 - Info.getNumUserSGPRs()) << "\n";
+
+  // TODO:
+  // (DONE) move the logic to the last
+  // (DONE) inspect the number of kernargs can be preloaded
+  // (DONE) be able to specify the width of kernarg by inspecting MF
+  // - support 1 / 2 / 4 / 8 bytes of kernargs
+
+  const Function &F = MF.getFunction();
+  const DataLayout &DL = F.getParent()->getDataLayout();
+  unsigned PreloadedKernArgCounter = 0;
+  for (const Argument &Arg : F.args()) {
+    if (Info.getNumUserSGPRs() >= 16)
+      break;
+
+    Type *ArgTy = Arg.getType();
+    uint64_t AllocSize = DL.getTypeAllocSize(ArgTy);
+    unsigned AllocSizeDWord = static_cast<unsigned>(AllocSize >> 2);
+
+    const TargetRegisterClass *RC = nullptr;
+    switch (AllocSizeDWord) {
+    case 1:
+      RC = &AMDGPU::SGPR_32RegClass;
+      break;
+    case 2:
+      RC = &AMDGPU::SGPR_64RegClass;
+      break;
+    case 4:
+      RC = &AMDGPU::SGPR_128RegClass;
+      break;
+    default:
+      llvm_unreachable("Unexpected kernel argument alloc size!");
+    }
+
+    if (PreloadedKernArgCounter < KernargPreloadCount) {
+      Register PreloadedKernArgReg = Info.addPreloadedKernArg(TRI, RC, AllocSizeDWord);
+      MF.addLiveIn(PreloadedKernArgReg, RC);
+      CCInfo.AllocateReg(PreloadedKernArgReg);
+    }
+
+    if (++PreloadedKernArgCounter >= KernargPreloadCount)
+      break;
+  }
 }
 
 // Allocate special input registers that are initialized per-wave.
