@@ -386,10 +386,13 @@ class SIMachineFunctionInfo final : public AMDGPUMachineFunction {
 
 private:
   unsigned LDSWaveSpillSize = 0;
+
+public:
   unsigned NumUserSGPRs = 0;
   unsigned NumSystemSGPRs = 0;
   unsigned NumKernargPreloadedSGPRs = 0;
 
+private:
   bool HasSpilledSGPRs = false;
   bool HasSpilledVGPRs = false;
   bool HasNonSpillStackObjects = false;
