@@ -2240,7 +2240,7 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
 
   const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
-  unsigned PreloadedKernArgCounter = 0;
+  auto &ArgInfo = Info.getArgInfo();
   for (const Argument &Arg : F.args()) {
     if (Info.getNumUserSGPRs() >= 16)
       break;
@@ -2248,6 +2248,9 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
     Type *ArgTy = Arg.getType();
     uint64_t AllocSize = DL.getTypeAllocSize(ArgTy);
     unsigned AllocSizeDWord = static_cast<unsigned>(AllocSize >> 2);
+
+    if (Info.getNumUserSGPRs() + AllocSizeDWord > 16)
+      break;
 
     const TargetRegisterClass *RC = nullptr;
     switch (AllocSizeDWord) {
@@ -2264,13 +2267,21 @@ void SITargetLowering::allocateHSAUserSGPRs(CCState &CCInfo,
       llvm_unreachable("Unexpected kernel argument alloc size!");
     }
 
-    if (PreloadedKernArgCounter < KernargPreloadCount) {
-      Register PreloadedKernArgReg = Info.addPreloadedKernArg(TRI, RC, AllocSizeDWord);
-      MF.addLiveIn(PreloadedKernArgReg, RC);
-      CCInfo.AllocateReg(PreloadedKernArgReg);
+    if (ArgInfo.PreloadedKernArgCount < KernargPreloadCount) {
+      if (AllocSizeDWord == 1) {
+        allocateSGPR32Input(CCInfo, ArgInfo.PreloadedKernArg[ArgInfo.PreloadedKernArgCount]);
+        Info.NumUserSGPRs += AllocSizeDWord;
+        Info.NumKernargPreloadedSGPRs += AllocSizeDWord;
+        ArgInfo.PreloadedKernArgCount++;
+        llvm::errs() << __FUNCTION__ << ": " << Info.NumUserSGPRs << "\n";
+      } else {
+        Register PreloadedKernArgReg = Info.addPreloadedKernArg(TRI, RC, AllocSizeDWord);
+        MF.addLiveIn(PreloadedKernArgReg, RC);
+        CCInfo.AllocateReg(PreloadedKernArgReg);
+      }
     }
 
-    if (++PreloadedKernArgCounter >= KernargPreloadCount)
+    if (ArgInfo.PreloadedKernArgCount >= KernargPreloadCount)
       break;
   }
 }

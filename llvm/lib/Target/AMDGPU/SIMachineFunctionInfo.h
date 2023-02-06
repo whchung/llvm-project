@@ -413,11 +413,12 @@ class SIMachineFunctionInfo final : public AMDGPUMachineFunction {
 
   const AMDGPUGWSResourcePseudoSourceValue GWSResourcePSV;
 
-private:
+public:
   unsigned NumUserSGPRs = 0;
   unsigned NumSystemSGPRs = 0;
   unsigned NumKernargPreloadedSGPRs = 0;
 
+private:
   bool HasSpilledSGPRs = false;
   bool HasSpilledVGPRs = false;
   bool HasNonSpillStackObjects = false;
