@@ -2431,7 +2431,6 @@ void SITargetLowering::insertCopiesSplitCSR(
   }
 }
 
-static unsigned counter = 0;
 
 SDValue SITargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
@@ -2462,6 +2461,8 @@ SDValue SITargetLowering::LowerFormalArguments(
   bool IsGraphics = AMDGPU::isGraphics(CallConv);
   bool IsKernel = AMDGPU::isKernel(CallConv);
   bool IsEntryFunc = AMDGPU::isEntryFunctionCC(CallConv);
+
+  unsigned KernargPreloaded = 0;
 
   if (IsGraphics) {
     assert(!Info->hasDispatchPtr() && !Info->hasKernargSegmentPtr() &&
@@ -2573,17 +2574,14 @@ SDValue SITargetLowering::LowerFormalArguments(
       }
 
       SDValue Arg;
-      if (counter < KernargPreloadCount) {
+      if (KernargPreloaded < KernargPreloadCount) {
         MachineFunction &MF = DAG.getMachineFunction();
         const SIMachineFunctionInfo *Info = MF.getInfo<SIMachineFunctionInfo>();
 
-        const ArgDescriptor *InputPtrReg = &(Info->getArgInfo().PreloadedKernArg[counter]);
-        MVT PtrVT = getPointerTy(DAG.getDataLayout(), AMDGPUAS::CONSTANT_ADDRESS);
+        const ArgDescriptor *InputPtrReg = &(Info->getArgInfo().PreloadedKernArg[KernargPreloaded++]);
         MachineRegisterInfo &MRI = DAG.getMachineFunction().getRegInfo();
         Register Reg = MRI.getLiveInVirtReg(InputPtrReg->getRegister());
-        Arg = DAG.getCopyFromReg(Chain, DL, Reg, PtrVT);
-
-        ++counter;
+        Arg = DAG.getCopyFromReg(Chain, DL, Reg, VT);
       } else {
         Arg = lowerKernargMemParameter(
           DAG, VT, MemVT, DL, Chain, Offset, Alignment, Ins[i].Flags.isSExt(), &Ins[i]);
@@ -2661,7 +2659,6 @@ SDValue SITargetLowering::LowerFormalArguments(
 
     InVals.push_back(Val);
   }
-  counter = 0;
 
   // Start adding system SGPRs.
   if (IsEntryFunc) {
