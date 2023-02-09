@@ -89,6 +89,9 @@ bool AMDGPULowerKernelArguments::runOnFunction(Function &F) {
   unsigned AS = KernArgSegment->getType()->getPointerAddressSpace();
   uint64_t ExplicitArgOffset = 0;
 
+  // XXX: HACK
+  unsigned SGPRUsed = 6;
+
   for (Argument &Arg : F.args()) {
     const bool IsByRef = Arg.hasByRefAttr();
     Type *ArgTy = IsByRef ? Arg.getParamByRefType() : Arg.getType();
@@ -115,6 +118,13 @@ bool AMDGPULowerKernelArguments::runOnFunction(Function &F) {
       Value *CastOffsetPtr = Builder.CreatePointerBitCastOrAddrSpaceCast(
           ArgOffsetPtr, Arg.getType());
       Arg.replaceAllUsesWith(CastOffsetPtr);
+      continue;
+    }
+
+    // XXX: HACK
+    unsigned AllocSizeDWord = alignTo(AllocSize, 4) / 4;
+    if (SGPRUsed + AllocSizeDWord <= 16) {
+      SGPRUsed += AllocSizeDWord;
       continue;
     }
 
