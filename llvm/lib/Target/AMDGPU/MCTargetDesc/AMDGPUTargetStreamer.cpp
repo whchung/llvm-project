@@ -344,7 +344,9 @@ void AMDGPUTargetAsmStreamer::EmitAmdhsaKernelDescriptor(
         OS, ".amdhsa_user_sgpr_private_segment_buffer", KD,
         kernel_code_properties,
         amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER);
-  OS << "\t\t.amdhsa_user_sgpr_kernarg_preload_count " << static_cast<uint32_t>(KD.kernarg_preload_count) << '\n';
+  // FIXME. Be able to specify kernarg_preload_offset.
+  OS << "\t\t.amdhsa_user_sgpr_kernarg_preload_length " << static_cast<uint32_t>(KD.kernarg_preload) << '\n';
+  OS << "\t\t.amdhsa_user_sgpr_kernarg_preload_offset " << 0 << '\n';
   PRINT_FIELD(OS, ".amdhsa_user_sgpr_dispatch_ptr", KD,
               kernel_code_properties,
               amdhsa::KERNEL_CODE_PROPERTY_ENABLE_SGPR_DISPATCH_PTR);
@@ -900,8 +902,7 @@ void AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor(
   Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc1);
   Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc2);
   Streamer.emitInt16(KernelDescriptor.kernel_code_properties);
-  Streamer.emitInt16(KernelDescriptor.reserved2);
-  Streamer.emitInt32(KernelDescriptor.kernarg_preload_count);
-  //for (uint8_t Res : KernelDescriptor.reserved3)
-  //  Streamer.emitInt8(Res);
+  Streamer.emitInt16(KernelDescriptor.kernarg_preload);
+  for (uint8_t Res : KernelDescriptor.reserved3)
+    Streamer.emitInt8(Res);
 }

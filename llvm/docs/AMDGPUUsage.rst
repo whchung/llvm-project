@@ -14849,8 +14849,6 @@ terminated by an ``.end_amdhsa_kernel`` directive.
      ``.amdhsa_user_sgpr_private_segment_buffer``             0                   GFX6-GFX10   Controls ENABLE_SGPR_PRIVATE_SEGMENT_BUFFER in
                                                                                   (except      :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.
                                                                                   GFX940)
-     ``.amdhsa_user_sgpr_kernarg_preload_count``              0                   GFX10        TBD TBD TBD in
-                                                                                               :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.    
      ``.amdhsa_user_sgpr_dispatch_ptr``                       0                   GFX6-GFX11   Controls ENABLE_SGPR_DISPATCH_PTR in
                                                                                                :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.
      ``.amdhsa_user_sgpr_queue_ptr``                          0                   GFX6-GFX11   Controls ENABLE_SGPR_QUEUE_PTR in
@@ -14957,6 +14955,10 @@ terminated by an ``.end_amdhsa_kernel`` directive.
                                                                                                :ref:`amdgpu-amdhsa-compute_pgm_rsrc2-gfx6-gfx11-table`.
      ``.amdhsa_exception_int_div_zero``                       0                   GFX6-GFX11   Controls ENABLE_EXCEPTION_INT_DIVIDE_BY_ZERO in
                                                                                                :ref:`amdgpu-amdhsa-compute_pgm_rsrc2-gfx6-gfx11-table`.
+     ``.amdhsa_user_sgpr_kernarg_preload_length``             0                   GFX90A       TBD TBD TBD in
+                                                                                               :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.    
+     ``.amdhsa_user_sgpr_kernarg_preload_offset``             0                   GFX90A       TBD TBD TBD in
+                                                                                               :ref:`amdgpu-amdhsa-kernel-descriptor-v3-table`.    
      ======================================================== =================== ============ ===================
 
 .amdgpu_metadata

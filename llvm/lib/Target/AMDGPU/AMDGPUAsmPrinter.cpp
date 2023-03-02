@@ -452,7 +452,8 @@ amdhsa::kernel_descriptor_t AMDGPUAsmPrinter::getAmdhsaKernelDescriptor(
     KernelDescriptor.compute_pgm_rsrc3 =
       CurrentProgramInfo.ComputePGMRSrc3GFX90A;
 
-  KernelDescriptor.kernarg_preload_count = Info->getNumKernargPreloadedSGPRs();
+  // FIXME. Fix offset be always 0 for now.
+  KernelDescriptor.kernarg_preload = static_cast<uint16_t>(Info->getNumKernargPreloadedSGPRs());
 
   return KernelDescriptor;
 }

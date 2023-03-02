@@ -2098,28 +2098,23 @@ AMDGPUDisassembler::decodeKernelDescriptorDirective(
 
     return MCDisassembler::Success;
 
-  case amdhsa::RESERVED2_OFFSET:
-    // 1 byte from here is reserved, must be 0.
-    ReservedBytes = DE.getBytes(Cursor, 1);
-    if (ReservedBytes[0] != 0) {
-      return MCDisassembler::Fail;
+  case amdhsa::KERNARG_PRELOAD_OFFSET:
+    using namespace amdhsa;
+    TwoByteBuffer = DE.getU16(Cursor);
+    PRINT_DIRECTIVE(".amdhsa_user_sgpr_kernarg_preload_length",
+                    KERNARG_PRELOAD_SPEC_LENGTH);
+    PRINT_DIRECTIVE(".amdhsa_user_sgpr_kernarg_preload_offset",
+                    KERNARG_PRELOAD_SPEC_OFFSET);
+    return MCDisassembler::Success;
+
+  case amdhsa::RESERVED3_OFFSET:
+    // 4 bytes from here are reserved, must be 0.
+    ReservedBytes = DE.getBytes(Cursor, 4);
+    for (int I = 0; I < 4; ++I) {
+      if (ReservedBytes[I] != 0)
+        return MCDisassembler::Fail;
     }
     return MCDisassembler::Success;
-
-  case amdhsa::KERNARG_PRELOAD_COUNT_OFFSET:
-    ByteBuffer = DE.getU32(Cursor);
-    KdStream << Indent << ".amdhsa_user_sgpr_kernarg_preload_count " << ByteBuffer
-             << '\n';
-    return MCDisassembler::Success;
-
-  //case amdhsa::RESERVED3_OFFSET:
-  //  // 4 bytes from here are reserved, must be 0.
-  //  ReservedBytes = DE.getBytes(Cursor, 4);
-  //  for (int I = 0; I < 4; ++I) {
-  //    if (ReservedBytes[I] != 0)
-  //      return MCDisassembler::Fail;
-  //  }
-  //  return MCDisassembler::Success;
 
   default:
     llvm_unreachable("Unhandled index. Case statements cover everything.");
