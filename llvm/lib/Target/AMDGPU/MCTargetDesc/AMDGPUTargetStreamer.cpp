@@ -889,13 +889,28 @@ void AMDGPUTargetELFStreamer::EmitAmdhsaKernelDescriptor(
   // expression being created is:
   //   (start of kernel code) - (start of kernel descriptor)
   // It implies R_AMDGPU_REL64, but ends up being R_AMDGPU_ABS64.
-  Streamer.emitValue(MCBinaryExpr::createSub(
-      MCSymbolRefExpr::create(
-          KernelCodeSymbol, MCSymbolRefExpr::VK_AMDGPU_REL64, Context),
-      MCSymbolRefExpr::create(
-          KernelDescriptorSymbol, MCSymbolRefExpr::VK_None, Context),
-      Context),
-      sizeof(KernelDescriptor.kernel_code_entry_byte_offset));
+  if (KernelDescriptor.kernarg_preload != 0) {
+    Streamer.emitValue(
+        MCBinaryExpr::createSub(
+            MCBinaryExpr::createSub(
+                MCSymbolRefExpr::create(KernelCodeSymbol,
+                                        MCSymbolRefExpr::VK_AMDGPU_REL64,
+                                        Context),
+                MCSymbolRefExpr::create(KernelDescriptorSymbol,
+                                        MCSymbolRefExpr::VK_None, Context),
+                Context),
+            MCConstantExpr::create(0x100, Context), Context),
+        sizeof(KernelDescriptor.kernel_code_entry_byte_offset));
+  } else {
+    Streamer.emitValue(
+        MCBinaryExpr::createSub(
+            MCSymbolRefExpr::create(KernelCodeSymbol,
+                                    MCSymbolRefExpr::VK_AMDGPU_REL64, Context),
+            MCSymbolRefExpr::create(KernelDescriptorSymbol,
+                                    MCSymbolRefExpr::VK_None, Context),
+            Context),
+        sizeof(KernelDescriptor.kernel_code_entry_byte_offset));
+  }
   for (uint8_t Res : KernelDescriptor.reserved1)
     Streamer.emitInt8(Res);
   Streamer.emitInt32(KernelDescriptor.compute_pgm_rsrc3);
